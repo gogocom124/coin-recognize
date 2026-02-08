@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Coin Collector v4.0</title>
+    <title>AI Coin Collector v5.0</title>
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js" crossorigin="anonymous"></script>
     <style>
-        :root { --primary: #4285f4; --error: #ea4335; --terminal: #1e1e1e; }
+        :root { --primary: #4285f4; --terminal: #1e1e1e; }
         body { font-family: sans-serif; background: #f8f9fa; margin: 0; display: flex; flex-direction: column; align-items: center; }
         header { width: 100%; padding: 15px; background: #202124; color: white; text-align: center; }
         .viewport { position: relative; width: 90%; max-width: 380px; aspect-ratio: 1/1; margin: 15px 0; border-radius: 20px; overflow: hidden; background: #000; border: 3px solid #ddd; }
@@ -15,7 +16,7 @@
                     mask: radial-gradient(circle 100px at center, transparent 100%, black 100%);
                     -webkit-mask: radial-gradient(circle 100px at center, transparent 99%, black 100%); }
         .guide-circle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; border: 2px dashed #00ff00; border-radius: 50%; }
-        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 130px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #333; }
+        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 140px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #333; }
         .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 20px; }
         button { padding: 12px 18px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; background: #fff; border: 1px solid #ccc; }
         #scan-btn { background: var(--primary); color: white; border: none; }
@@ -28,7 +29,7 @@
 </head>
 <body>
 
-<header><h1>🪙 동전 도감 v4.0</h1></header>
+<header><h1>🪙 동전 도감 v5.0</h1></header>
 
 <div class="viewport">
     <video id="webcam" autoplay playsinline></video>
@@ -36,13 +37,13 @@
     <div class="guide-circle"></div>
 </div>
 
-<div id="debug-console" class="debug-section">🚀 v4.0 시스템 대기 중...</div>
+<div id="debug-console" class="debug-section">🛠️ v5.0 시스템 대기 중...</div>
 
 <div class="btn-group">
     <button id="scan-btn" disabled>📷 스캔 시작</button>
     <button id="torch-btn" disabled>🔦 라이트</button>
     <button id="macro-btn" disabled>🔍 접사</button>
-    <button onclick="location.reload()" style="background:#6c757d; color:white;">🔄 새로고침</button>
+    <button onclick="location.reload()" style="background:#6c757d; color:white;">🔄 앱 리셋</button>
 </div>
 
 <div class="list-section">
@@ -51,10 +52,8 @@
 
 <canvas id="temp-canvas" style="display:none;"></canvas>
 
-<script type="module">
-    // [해결책] 특정 파일이 아닌 전체 패키지를 가져와서 이름을 직접 지정합니다.
-    import * as vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/vision_bundle.mjs";
-
+<script>
+    // 이제 import 문법을 쓰지 않습니다. (에러 방지 핵심)
     const video = document.getElementById('webcam');
     const debugConsole = document.getElementById('debug-console');
     const scanBtn = document.getElementById('scan-btn');
@@ -72,26 +71,24 @@
 
     async function startApp() {
         try {
-            log("1. 라이브러리 검사 중...");
-            // vision 객체 안에 필요한 도구들이 있는지 확인
-            if (!vision.TextRecognizer) {
-                throw new Error("TextRecognizer를 찾을 수 없습니다. 주소 문제입니다.");
+            log("1. AI 라이브러리 체크 중...");
+            // 라이브러리가 로드되었는지 전역 객체(tasksVision) 확인
+            const vision = window.tasksVision;
+            if (!vision) {
+                throw new Error("라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하세요.");
             }
-            log("✅ 라이브러리 로드 성공");
+            log("✅ AI 라이브러리 감지 성공");
 
-            log("2. DB 연결 중...");
+            log("2. 데이터베이스 초기화 중...");
             const dbReq = indexedDB.open("CoinDB", 1);
             dbReq.onupgradeneeded = (e) => e.target.result.createObjectStore("coins", { keyPath: "id", autoIncrement: true });
-            db = await new Promise((res, rej) => {
-                dbReq.onsuccess = (e) => res(e.target.result);
-                dbReq.onerror = () => rej(new Error("DB 연결 실패"));
-            });
+            db = await new Promise((res) => dbReq.onsuccess = (e) => res(e.target.result));
             renderTable();
             log("✅ DB 준비 완료");
 
-            log("3. AI 엔진 설정 중...");
+            log("3. AI 엔진 설정 중 (수 초 소요)...");
             const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm"
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
             );
             textRecognizer = await vision.TextRecognizer.createFromOptions(filesetResolver, {
                 baseOptions: {
@@ -99,38 +96,35 @@
                     delegate: "GPU"
                 }
             });
-            log("✅ AI 준비 완료", "#4285f4");
+            log("✅ AI 준비 완료!", "#4285f4");
 
-            log("4. 카메라 구동 중...");
+            log("4. 카메라 활성화 중...");
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
             });
             video.srcObject = stream;
             videoTrack = stream.getVideoTracks()[0];
             
-            // 지원 기능 체크
+            // 하드웨어 지원 확인
             const caps = videoTrack.getCapabilities();
             if (caps.torch) torchBtn.disabled = false;
             if (caps.focusMode && caps.focusMode.includes('manual')) macroBtn.disabled = false;
             scanBtn.disabled = false;
 
-            log("✨ 모든 준비 완료! 스캔하세요.", "#fff");
+            log("🚀 모든 준비 완료! 동전을 비추세요.", "#fff");
 
         } catch (err) {
-            log("❌ 치명적 오류: " + err.message, "#ea4335");
+            log("❌ 치명적 오류: " + err.message, "#ff4757");
             console.error(err);
         }
     }
 
-    // 스캔 버튼
     scanBtn.onclick = async () => {
-        log("🔍 이미지 분석 시작...");
+        log("🔍 이미지 분석 중...");
         const canvas = document.getElementById('temp-canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 300; canvas.height = 300;
         
-        // 중앙 영역 크롭
-        const scale = video.videoWidth / video.clientWidth;
         ctx.drawImage(video, (video.videoWidth-300)/2, (video.videoHeight-300)/2, 300, 300, 0, 0, 300, 300);
 
         const result = await textRecognizer.recognize(canvas);
@@ -147,7 +141,7 @@
         canvas.toBlob((blob) => {
             const tx = db.transaction("coins", "readwrite");
             tx.objectStore("coins").add({ amount, year, image: blob, time: new Date() });
-            tx.oncomplete = () => { log("💾 기록 저장됨"); renderTable(); };
+            tx.oncomplete = () => { log("💾 저장됨: " + year + "년 " + amount + "원"); renderTable(); };
         }, 'image/webp');
     };
 
@@ -183,11 +177,11 @@
         };
     }
 
-    // OpenCV 초기화 대기 및 실행
+    // OpenCV 로드 확인 후 앱 시작
     if (typeof cv !== 'undefined' && cv.onRuntimeInitialized) {
         cv.onRuntimeInitialized = startApp;
     } else {
-        setTimeout(startApp, 1000);
+        setTimeout(startApp, 1000); // 1초 대기 후 시작
     }
 </script>
 </body>
