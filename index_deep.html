@@ -6,8 +6,8 @@
     <title>AI Coin Collector v5.0</title>
     <!-- OpenCV 라이브러리 -->
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
-    <!-- MediaPipe 라이브러리 (안정적인 버전) -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js"></script>
+    <!-- MediaPipe 라이브러리 (CDN 경로 변경) -->
+    <script src="https://unpkg.com/@mediapipe/tasks-vision@0.10.3/vision_bundle.js"></script>
     <style>
         :root { 
             --primary: #4285f4; 
@@ -45,18 +45,6 @@
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             border: 1px solid rgba(255,255,255,0.1);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #4285f4, #34a853, #fbbc05, #ea4335);
         }
         
         header h1 {
@@ -66,99 +54,87 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
         
-        .app-info {
+        .debug-panel {
             width: 100%;
-            max-width: 400px;
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-            gap: 10px;
-        }
-        
-        .info-box {
-            flex: 1;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            border-radius: 10px;
-            padding: 10px 15px;
-            text-align: center;
-            font-size: 14px;
-            border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(5px);
-        }
-        
-        .info-box .label {
-            font-size: 12px;
-            color: #aaa;
-            margin-bottom: 4px;
-        }
-        
-        .info-box .value {
-            font-weight: bold;
-            font-size: 16px;
-        }
-        
-        .status-box {
-            width: 100%;
-            max-width: 400px;
+            max-width: 600px;
             background: rgba(0, 0, 0, 0.8);
             color: white;
             border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(255,255,255,0.15);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            padding: 20px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
         }
         
-        .status-header {
+        .debug-title {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
         }
         
-        .status-title {
-            font-weight: 600;
-            font-size: 16px;
+        .debug-title h3 {
+            margin: 0;
+            color: #4285f4;
             display: flex;
             align-items: center;
             gap: 8px;
         }
         
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #666;
-            animation: pulse 1.5s infinite;
+        .debug-content {
+            height: 200px;
+            overflow-y: auto;
+            background: #111;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
         }
         
-        .status-indicator.ready {
-            background: #2ecc71;
-            animation: none;
+        .debug-log {
+            margin-bottom: 5px;
         }
         
-        .status-indicator.loading {
-            background: #f39c12;
+        .debug-log.info { color: #00ff00; }
+        .debug-log.warn { color: #f39c12; }
+        .debug-log.error { color: #e74c3c; }
+        .debug-log.debug { color: #4285f4; }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 600px;
         }
         
-        .status-indicator.error {
-            background: #e74c3c;
-            animation: pulseError 1s infinite;
+        .status-card {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
         }
         
-        @keyframes pulseError {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .status-card .label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
         }
         
-        .status-text {
-            font-size: 15px;
-            min-height: 22px;
+        .status-card .value {
+            font-weight: bold;
+            font-size: 16px;
         }
+        
+        .status-card .value.ready { color: #2ecc71; }
+        .status-card .value.loading { color: #f39c12; }
+        .status-card .value.error { color: #e74c3c; }
         
         .viewport { 
             position: relative; 
@@ -178,7 +154,6 @@
             height: 100%; 
             object-fit: cover;
             display: block;
-            transform: scaleX(1); /* 미러 효과 없음 */
         }
         
         .overlay { 
@@ -204,53 +179,12 @@
             border-radius: 50%;
             pointer-events: none;
             animation: pulse 2s infinite ease-in-out;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
         }
         
         @keyframes pulse {
-            0% { 
-                border-color: rgba(0, 255, 0, 0.6); 
-                box-shadow: 0 0 15px rgba(0, 255, 0, 0.2);
-            }
-            50% { 
-                border-color: rgba(0, 255, 0, 1); 
-                box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
-            }
-            100% { 
-                border-color: rgba(0, 255, 0, 0.6); 
-                box-shadow: 0 0 15px rgba(0, 255, 0, 0.2);
-            }
-        }
-        
-        .debug-section { 
-            width: 100%; 
-            max-width: 400px; 
-            background: var(--terminal); 
-            color: #00ff00; 
-            border-radius: 12px; 
-            padding: 15px; 
-            font-family: 'Courier New', 'Consolas', monospace; 
-            font-size: 12px; 
-            line-height: 1.4;
-            height: 150px; 
-            overflow-y: auto; 
-            margin-bottom: 20px; 
-            border: 1px solid #333;
-            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
-        }
-        
-        .debug-section::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .debug-section::-webkit-scrollbar-track {
-            background: #111;
-            border-radius: 4px;
-        }
-        
-        .debug-section::-webkit-scrollbar-thumb {
-            background: #444;
-            border-radius: 4px;
+            0% { border-color: rgba(0, 255, 0, 0.6); }
+            50% { border-color: rgba(0, 255, 0, 1); }
+            100% { border-color: rgba(0, 255, 0, 0.6); }
         }
         
         .btn-group { 
@@ -280,7 +214,6 @@
             gap: 8px;
             flex: 1;
             min-width: 140px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
         }
         
         button:hover:not(:disabled) {
@@ -300,27 +233,6 @@
             flex: 2;
             font-size: 17px;
             font-weight: 700;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        #scan-btn::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transition: left 0.5s;
-        }
-        
-        #scan-btn:hover:not(:disabled)::after {
-            left: 100%;
-        }
-        
-        #scan-btn:disabled {
-            background: #666;
         }
         
         button:disabled { 
@@ -329,7 +241,6 @@
             cursor: not-allowed;
             transform: none !important;
             box-shadow: none !important;
-            border-color: #777 !important;
         }
         
         .list-section { 
@@ -340,7 +251,6 @@
             padding: 25px; 
             margin-bottom: 20px;
             box-shadow: 0 10px 35px rgba(0,0,0,0.15);
-            border: 1px solid rgba(255,255,255,0.2);
         }
         
         .list-section h2 {
@@ -350,10 +260,6 @@
             padding-bottom: 15px;
             border-bottom: 3px solid #eee;
             font-size: 1.6rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
         }
         
         table { 
@@ -362,7 +268,7 @@
         }
         
         th {
-            background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+            background: #f8f9fa;
             padding: 14px 12px;
             color: #5a6c7d;
             font-weight: 700;
@@ -378,10 +284,6 @@
             vertical-align: middle;
         }
         
-        tr:hover {
-            background-color: #f8f9fa;
-        }
-        
         .coin-thumb { 
             width: 70px; 
             height: 70px; 
@@ -389,12 +291,6 @@
             object-fit: cover;
             border: 3px solid #4285f4;
             box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
-            transition: all 0.3s ease;
-        }
-        
-        .coin-thumb:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 18px rgba(66, 133, 244, 0.4);
         }
         
         .empty-state {
@@ -404,114 +300,6 @@
             font-style: italic;
             font-size: 16px;
             line-height: 1.6;
-            background: #f8f9fa;
-            border-radius: 10px;
-            margin: 10px 0;
-        }
-        
-        .counter {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #4285f4, #34a853);
-            color: white;
-            border-radius: 50%;
-            min-width: 30px;
-            height: 30px;
-            line-height: 30px;
-            font-size: 15px;
-            font-weight: 700;
-            margin-left: 8px;
-            box-shadow: 0 3px 10px rgba(66, 133, 244, 0.3);
-        }
-        
-        .coin-amount {
-            font-weight: 800;
-            font-size: 22px;
-            color: #2c3e50;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-        
-        .coin-year {
-            font-weight: 800;
-            font-size: 22px;
-            color: #e74c3c;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-        
-        .coin-time {
-            font-size: 13px;
-            color: #7f8c8d;
-            line-height: 1.4;
-        }
-        
-        .ai-status {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: bold;
-            margin-left: 5px;
-        }
-        
-        .ai-status.on {
-            background: #2ecc71;
-            color: white;
-        }
-        
-        .ai-status.off {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .ai-status.basic {
-            background: #f39c12;
-            color: white;
-        }
-        
-        @media (max-width: 480px) {
-            body {
-                padding: 15px 12px 30px;
-            }
-            
-            header {
-                padding: 18px 15px;
-            }
-            
-            header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .viewport {
-                max-width: 350px;
-            }
-            
-            button {
-                padding: 14px 16px;
-                font-size: 15px;
-                min-width: 130px;
-            }
-            
-            #scan-btn {
-                font-size: 16px;
-            }
-            
-            .list-section {
-                padding: 20px 15px;
-            }
-            
-            .list-section h2 {
-                font-size: 1.4rem;
-            }
-            
-            .coin-thumb {
-                width: 60px;
-                height: 60px;
-            }
-            
-            .coin-amount, .coin-year {
-                font-size: 20px;
-            }
         }
         
         footer {
@@ -522,76 +310,36 @@
             max-width: 600px;
             padding: 0 20px;
         }
-        
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            max-width: 400px;
-            width: 90%;
-            text-align: center;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        }
-        
-        .modal h3 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
-        
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        
-        .modal-buttons button {
-            flex: 1;
-        }
     </style>
 </head>
 <body>
 
 <header>
-    <h1>🪙 AI 동전 도감 v5.0</h1>
+    <h1>🪙 AI 동전 도감 v5.0 - 디버그 모드</h1>
 </header>
 
-<div class="app-info">
-    <div class="info-box">
-        <div class="label">AI 상태</div>
-        <div class="value" id="ai-status">확인 중...</div>
+<div class="debug-panel">
+    <div class="debug-title">
+        <h3>🔍 시스템 디버그 로그</h3>
+        <button onclick="clearDebugLog()" style="background:#666; color:white; padding: 5px 10px; font-size: 12px;">로그 지우기</button>
     </div>
-    <div class="info-box">
-        <div class="label">카메라</div>
-        <div class="value" id="camera-status">확인 중...</div>
+    <div class="debug-content" id="debug-content">
+        <!-- 디버그 로그가 여기에 표시됩니다 -->
     </div>
-    <div class="info-box">
-        <div class="label">수집한 동전</div>
-        <div class="value" id="coin-count">0</div>
-    </div>
-</div>
-
-<div class="status-box">
-    <div class="status-header">
-        <div class="status-title">
-            <div class="status-indicator" id="status-indicator"></div>
-            시스템 상태
+    <div class="status-grid">
+        <div class="status-card">
+            <div class="label">OpenCV 상태</div>
+            <div class="value loading" id="opencv-status">확인 중...</div>
         </div>
-        <div id="app-mode"></div>
+        <div class="status-card">
+            <div class="label">MediaPipe 상태</div>
+            <div class="value loading" id="mediapipe-status">확인 중...</div>
+        </div>
+        <div class="status-card">
+            <div class="label">카메라 상태</div>
+            <div class="value loading" id="camera-status">확인 중...</div>
+        </div>
     </div>
-    <div class="status-text" id="status-text">시스템 초기화 중...</div>
 </div>
 
 <div class="viewport">
@@ -600,19 +348,15 @@
     <div class="guide-circle"></div>
 </div>
 
-<div id="debug-console" class="debug-section">
-    <div style="color:#00ff00;">[시스템] AI 동전 도감 v5.0 시작 중...</div>
-</div>
-
 <div class="btn-group">
     <button id="scan-btn" disabled>📷 동전 스캔</button>
     <button id="torch-btn" disabled>🔦 라이트</button>
     <button id="macro-btn" disabled>🔍 접사모드</button>
-    <button id="reset-btn" style="background:#6c757d; color:white;">🔄 재시작</button>
+    <button onclick="location.reload()" style="background:#6c757d; color:white;">🔄 재시작</button>
 </div>
 
 <div class="list-section">
-    <h2>📂 수집된 동전 <span id="total-coins" class="counter">0</span></h2>
+    <h2>📂 수집된 동전 <span id="coin-count" style="color:#4285f4;">0</span></h2>
     <table>
         <thead>
             <tr>
@@ -624,54 +368,58 @@
         </thead>
         <tbody id="coin-list">
             <tr>
-                <td colspan="4" class="empty-state">
-                    아직 수집된 동전이 없습니다.<br>
-                    동전을 카메라 중앙에 놓고 [동전 스캔] 버튼을 눌러주세요.
-                </td>
+                <td colspan="4" class="empty-state">아직 수집된 동전이 없습니다.<br>동전을 카메라 중앙에 놓고 [동전 스캔] 버튼을 눌러주세요.</td>
             </tr>
         </tbody>
     </table>
 </div>
 
 <footer>
-    AI 동전 인식 시스템 v5.0 | 카메라 권한 필요 | 모바일 & 데스크톱 지원
+    AI 동전 인식 시스템 v5.0 | 디버그 모드 활성화 | MediaPipe 라이브러리 로드 확인 중
 </footer>
-
-<!-- 모달 창 -->
-<div id="error-modal" class="modal">
-    <div class="modal-content">
-        <h3>⚠️ 라이브러리 로드 오류</h3>
-        <p id="modal-message">AI 라이브러리를 로드하는데 문제가 발생했습니다.</p>
-        <div class="modal-buttons">
-            <button onclick="retryLoadLibrary()" style="background:#4285f4; color:white;">🔄 재시도</button>
-            <button onclick="useBasicMode()" style="background:#34a853; color:white;">✅ 기본 모드로 진행</button>
-            <button onclick="closeModal()" style="background:#6c757d; color:white;">❌ 닫기</button>
-        </div>
-    </div>
-</div>
 
 <!-- 숨겨진 캔버스 -->
 <canvas id="temp-canvas" style="display:none;"></canvas>
-<canvas id="preview-canvas" style="display:none;"></canvas>
 
 <script>
+    // ========== 디버그 로깅 시스템 ==========
+    
+    const debugContent = document.getElementById('debug-content');
+    const opencvStatus = document.getElementById('opencv-status');
+    const mediapipeStatus = document.getElementById('mediapipe-status');
+    const cameraStatus = document.getElementById('camera-status');
+    
+    function debugLog(message, type = 'info') {
+        const now = new Date();
+        const timestamp = now.toTimeString().split(' ')[0];
+        const logEntry = document.createElement('div');
+        logEntry.className = `debug-log ${type}`;
+        logEntry.textContent = `[${timestamp}] ${message}`;
+        debugContent.appendChild(logEntry);
+        debugContent.scrollTop = debugContent.scrollHeight;
+        
+        // 콘솔에도 출력
+        console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+    
+    function clearDebugLog() {
+        debugContent.innerHTML = '';
+        debugLog('로그가 지워졌습니다', 'info');
+    }
+    
+    function updateStatus(element, status, message) {
+        element.textContent = message;
+        element.className = 'value ' + status;
+    }
+    
     // ========== 전역 변수 ==========
+    
     const video = document.getElementById('webcam');
-    const debugConsole = document.getElementById('debug-console');
     const scanBtn = document.getElementById('scan-btn');
     const torchBtn = document.getElementById('torch-btn');
     const macroBtn = document.getElementById('macro-btn');
-    const resetBtn = document.getElementById('reset-btn');
     const coinList = document.getElementById('coin-list');
-    const statusText = document.getElementById('status-text');
-    const statusIndicator = document.getElementById('status-indicator');
     const coinCount = document.getElementById('coin-count');
-    const totalCoins = document.getElementById('total-coins');
-    const aiStatus = document.getElementById('ai-status');
-    const cameraStatus = document.getElementById('camera-status');
-    const appMode = document.getElementById('app-mode');
-    const errorModal = document.getElementById('error-modal');
-    const modalMessage = document.getElementById('modal-message');
     
     let textRecognizer = null;
     let db = null;
@@ -680,132 +428,243 @@
     let isMacroOn = false;
     let isProcessing = false;
     let isAppReady = false;
-    let aiMode = 'unknown'; // 'ai', 'basic', 'failed'
-    let libraryRetryCount = 0;
     
-    // ========== 유틸리티 함수 ==========
+    // ========== MediaPipe 라이브러리 진단 ==========
     
-    // 로그 출력
-    function log(msg, color = "#00ff00") {
-        const now = new Date();
-        const time = now.toTimeString().split(' ')[0];
-        const logEntry = `<div style="color:${color}; margin-bottom: 3px;">[${time}] ${msg}</div>`;
-        debugConsole.innerHTML += logEntry;
-        debugConsole.scrollTop = debugConsole.scrollHeight;
+    function diagnoseMediaPipe() {
+        debugLog('=== MediaPipe 라이브러리 진단 시작 ===', 'debug');
+        
+        // window 객체 확인
+        debugLog('window 객체 검사 중...', 'debug');
+        const windowKeys = Object.keys(window).filter(key => 
+            key.toLowerCase().includes('mediapipe') || 
+            key.toLowerCase().includes('vision') ||
+            key.toLowerCase().includes('tasks')
+        );
+        
+        debugLog(`관련 window 키: ${windowKeys.join(', ') || '없음'}`, 'debug');
+        
+        // 특정 객체 확인
+        const checkObjects = [
+            'tasksVision',
+            'Vision',
+            'mediapipe',
+            'MediaPipe',
+            'TextRecognizer',
+            'FilesetResolver'
+        ];
+        
+        checkObjects.forEach(objName => {
+            if (window[objName]) {
+                debugLog(`✅ window.${objName} 발견: ${typeof window[objName]}`, 'info');
+            } else {
+                debugLog(`❌ window.${objName} 없음`, 'warn');
+            }
+        });
+        
+        // 스크립트 태그 확인
+        const scripts = document.querySelectorAll('script');
+        debugLog(`페이지의 스크립트 태그 수: ${scripts.length}`, 'debug');
+        scripts.forEach((script, i) => {
+            if (script.src.includes('mediapipe') || script.src.includes('vision')) {
+                debugLog(`📜 스크립트 ${i}: ${script.src}`, 'info');
+            }
+        });
+        
+        // CDN 테스트
+        testCDNAccess();
     }
     
-    // 상태 업데이트
-    function updateStatus(text, type = 'info') {
-        statusText.textContent = text;
+    function testCDNAccess() {
+        debugLog('CDN 접근성 테스트 중...', 'debug');
         
-        // 상태 표시기 업데이트
-        statusIndicator.className = 'status-indicator';
-        switch(type) {
-            case 'ready':
-                statusIndicator.classList.add('ready');
-                break;
-            case 'loading':
-                statusIndicator.classList.add('loading');
-                break;
-            case 'error':
-                statusIndicator.classList.add('error');
-                break;
+        const cdns = [
+            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js',
+            'https://unpkg.com/@mediapipe/tasks-vision@0.10.3/vision_bundle.js',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.js'
+        ];
+        
+        cdns.forEach((cdn, index) => {
+            const testScript = document.createElement('script');
+            testScript.src = cdn;
+            testScript.onload = () => {
+                debugLog(`✅ CDN ${index+1} 접근 가능: ${cdn}`, 'info');
+                testScript.remove();
+            };
+            testScript.onerror = () => {
+                debugLog(`❌ CDN ${index+1} 접근 불가: ${cdn}`, 'error');
+                testScript.remove();
+            };
+            
+            // 짧은 타임아웃 설정
+            setTimeout(() => {
+                if (testScript.parentNode) {
+                    testScript.remove();
+                    debugLog(`⚠️ CDN ${index+1} 타임아웃: ${cdn}`, 'warn');
+                }
+            }, 5000);
+            
+            document.head.appendChild(testScript);
+        });
+    }
+    
+    // ========== 라이브러리 강제 로드 ==========
+    
+    async function loadMediaPipeForcibly() {
+        debugLog('MediaPipe 라이브러리 강제 로드 시작...', 'debug');
+        updateStatus(mediapipeStatus, 'loading', '로드 시도 중...');
+        
+        // 여러 CDN 시도
+        const cdns = [
+            'https://unpkg.com/@mediapipe/tasks-vision@0.10.3/vision_bundle.js',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js',
+            'https://esm.run/@mediapipe/tasks-vision@0.10.3'
+        ];
+        
+        for (let i = 0; i < cdns.length; i++) {
+            debugLog(`CDN 시도 ${i+1}/${cdns.length}: ${cdns[i]}`, 'debug');
+            
+            try {
+                const loaded = await loadScript(cdns[i]);
+                if (loaded) {
+                    debugLog(`✅ CDN ${i+1}에서 라이브러리 로드 성공`, 'info');
+                    
+                    // 객체 확인
+                    await checkMediaPipeObjects();
+                    return true;
+                }
+            } catch (error) {
+                debugLog(`❌ CDN ${i+1} 로드 실패: ${error.message}`, 'error');
+            }
         }
         
-        // 상태에 따른 색상
-        switch(type) {
-            case 'ready':
-                statusText.style.color = '#2ecc71';
-                break;
-            case 'loading':
-                statusText.style.color = '#f39c12';
-                break;
-            case 'error':
-                statusText.style.color = '#e74c3c';
-                break;
-            default:
-                statusText.style.color = '#ffffff';
-        }
+        debugLog('모든 CDN 시도 실패', 'error');
+        updateStatus(mediapipeStatus, 'error', '로드 실패');
+        return false;
     }
     
-    // AI 상태 업데이트
-    function updateAIStatus(status) {
-        aiMode = status;
-        let text = '';
-        let color = '';
-        
-        switch(status) {
-            case 'ai':
-                text = 'AI 모드';
-                color = '#2ecc71';
-                aiStatus.innerHTML = 'AI 모드 <span class="ai-status on">ON</span>';
-                appMode.textContent = '🤖 AI 모드';
-                break;
-            case 'basic':
-                text = '기본 모드';
-                color = '#f39c12';
-                aiStatus.innerHTML = '기본 모드 <span class="ai-status basic">기본</span>';
-                appMode.textContent = '🔤 기본 모드';
-                break;
-            case 'failed':
-                text = '로드 실패';
-                color = '#e74c3c';
-                aiStatus.innerHTML = '로드 실패 <span class="ai-status off">OFF</span>';
-                appMode.textContent = '⚠️ 제한 모드';
-                break;
-            default:
-                text = '확인 중...';
-                color = '#666';
-        }
-        
-        aiStatus.style.color = color;
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            // 이미 로드되었는지 확인
+            if (window.tasksVision || window.Vision) {
+                resolve(true);
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.src = src;
+            
+            script.onload = () => {
+                setTimeout(() => {
+                    if (window.tasksVision || window.Vision) {
+                        resolve(true);
+                    } else {
+                        resolve(false);
+                    }
+                }, 2000);
+            };
+            
+            script.onerror = () => {
+                reject(new Error(`스크립트 로드 실패: ${src}`));
+            };
+            
+            document.head.appendChild(script);
+        });
     }
     
-    // 카메라 상태 업데이트
-    function updateCameraStatus(status) {
-        let text = '';
-        let color = '';
+    async function checkMediaPipeObjects() {
+        debugLog('MediaPipe 객체 확인 중...', 'debug');
         
-        switch(status) {
-            case 'ready':
-                text = '사용 가능';
-                color = '#2ecc71';
-                break;
-            case 'loading':
-                text = '연결 중...';
-                color = '#f39c12';
-                break;
-            case 'error':
-                text = '연결 실패';
-                color = '#e74c3c';
-                break;
-            default:
-                text = '확인 중...';
-                color = '#666';
+        // 글로벌 객체 확인
+        if (window.tasksVision) {
+            debugLog('✅ window.tasksVision 발견', 'info');
+            window.Vision = window.tasksVision; // 호환성
+            updateStatus(mediapipeStatus, 'ready', 'tasksVision 사용');
+            return true;
         }
         
-        cameraStatus.textContent = text;
-        cameraStatus.style.color = color;
+        if (window.Vision) {
+            debugLog('✅ window.Vision 발견', 'info');
+            updateStatus(mediapipeStatus, 'ready', 'Vision 사용');
+            return true;
+        }
+        
+        // 다른 가능한 객체 확인
+        const possiblePaths = [
+            'window.mediapipe',
+            'window.MediaPipe',
+            'window.tasks',
+            'window.TaskRunner'
+        ];
+        
+        for (const path of possiblePaths) {
+            try {
+                const obj = eval(path);
+                if (obj) {
+                    debugLog(`✅ ${path} 발견`, 'info');
+                    updateStatus(mediapipeStatus, 'ready', path + ' 사용');
+                    return true;
+                }
+            } catch (e) {
+                // 무시
+            }
+        }
+        
+        debugLog('❌ MediaPipe 관련 객체를 찾을 수 없음', 'error');
+        updateStatus(mediapipeStatus, 'error', '객체 없음');
+        return false;
     }
     
-    // 모달 제어
-    function showModal(message) {
-        modalMessage.textContent = message;
-        errorModal.style.display = 'flex';
-    }
+    // ========== AI 모델 초기화 ==========
     
-    function closeModal() {
-        errorModal.style.display = 'none';
+    async function initAIModel() {
+        try {
+            debugLog('AI 모델 초기화 시도...', 'debug');
+            
+            // MediaPipe 확인
+            const vision = window.tasksVision || window.Vision;
+            if (!vision) {
+                debugLog('MediaPipe 라이브러리를 찾을 수 없습니다', 'warn');
+                return false;
+            }
+            
+            debugLog('✅ MediaPipe 객체 발견, FilesetResolver 생성 중...', 'info');
+            
+            // FilesetResolver 생성
+            const filesetResolver = await vision.FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            
+            debugLog('✅ FilesetResolver 생성 완료, TextRecognizer 생성 중...', 'info');
+            
+            // TextRecognizer 생성
+            textRecognizer = await vision.TextRecognizer.createFromOptions(
+                filesetResolver,
+                {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
+                        delegate: "GPU"
+                    },
+                    runningMode: "IMAGE"
+                }
+            );
+            
+            debugLog('✅ AI 모델 초기화 완료!', 'info');
+            return true;
+        } catch (error) {
+            debugLog(`❌ AI 모델 초기화 실패: ${error.message}`, 'error');
+            debugLog(`에러 상세: ${error.stack}`, 'debug');
+            return false;
+        }
     }
     
     // ========== 데이터베이스 ==========
     
-    // DB 초기화
     function initDatabase() {
         return new Promise((resolve, reject) => {
-            log("데이터베이스 초기화 중...");
+            debugLog('데이터베이스 초기화 중...', 'debug');
             
-            const request = indexedDB.open("CoinCollectionDB", 1);
+            const request = indexedDB.open("CoinCollectionDebug", 1);
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
@@ -814,27 +673,26 @@
                         keyPath: "id", 
                         autoIncrement: true 
                     });
-                    store.createIndex("year", "year", { unique: false });
-                    store.createIndex("amount", "amount", { unique: false });
-                    store.createIndex("time", "time", { unique: false });
+                    store.createIndex("year", "year");
+                    store.createIndex("amount", "amount");
+                    store.createIndex("time", "time");
                 }
             };
             
             request.onsuccess = (event) => {
                 db = event.target.result;
-                log("✅ 데이터베이스 연결 성공");
+                debugLog('✅ 데이터베이스 연결 성공', 'info');
                 loadCoins();
                 resolve();
             };
             
             request.onerror = (event) => {
-                log(`❌ 데이터베이스 오류: ${event.target.error}`, "#e74c3c");
+                debugLog(`❌ 데이터베이스 오류: ${event.target.error}`, 'error');
                 reject(event.target.error);
             };
         });
     }
     
-    // 동전 로드
     function loadCoins() {
         if (!db) return;
         
@@ -846,17 +704,10 @@
             const coins = event.target.result || [];
             coins.sort((a, b) => new Date(b.time) - new Date(a.time));
             renderCoinList(coins);
-            updateCoinCount(coins.length);
+            coinCount.textContent = coins.length;
         };
     }
     
-    // 동전 개수 업데이트
-    function updateCoinCount(count) {
-        coinCount.textContent = count;
-        totalCoins.textContent = count;
-    }
-    
-    // 동전 목록 렌더링
     function renderCoinList(coins) {
         if (coins.length === 0) {
             coinList.innerHTML = `
@@ -878,142 +729,40 @@
                 minute: '2-digit' 
             });
             
-            // 이미지 URL 생성
-            let imageUrl = '';
-            if (coin.image && coin.image instanceof Blob) {
-                imageUrl = URL.createObjectURL(coin.image);
-            } else if (coin.image && typeof coin.image === 'string') {
-                imageUrl = coin.image;
-            }
-            
             html += `
                 <tr>
-                    <td><img src="${imageUrl}" class="coin-thumb" alt="동전 이미지" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"70\" height=\"70\" viewBox=\"0 0 70 70\"><circle cx=\"35\" cy=\"35\" r=\"32\" fill=\"%234285f4\" opacity=\"0.2\"/><text x=\"35\" y=\"40\" text-anchor=\"middle\" font-family=\"Arial\" font-size=\"14\" fill=\"white\">${coin.amount}</text></svg>'"></td>
-                    <td><span class="coin-amount">${coin.amount}원</span></td>
-                    <td><span class="coin-year">${coin.year}년</span></td>
-                    <td><div class="coin-time">${dateStr}<br>${timeStr}</div></td>
+                    <td><img src="${URL.createObjectURL(coin.image)}" class="coin-thumb" alt="동전"></td>
+                    <td style="font-weight:bold; font-size:18px;">${coin.amount}원</td>
+                    <td style="font-weight:bold; font-size:18px; color:#e74c3c;">${coin.year}년</td>
+                    <td style="font-size:13px; color:#666;">${dateStr}<br>${timeStr}</td>
                 </tr>`;
         });
         
         coinList.innerHTML = html;
     }
     
-    // ========== AI 모델 로드 ==========
-    
-    // MediaPipe 라이브러리 강제 로드
-    function loadMediaPipeLibrary() {
-        return new Promise((resolve) => {
-            log("MediaPipe 라이브러리 로드 시도...");
-            updateAIStatus('loading');
-            
-            // 이미 로드되었는지 확인
-            if (window.tasksVision || window.Vision) {
-                log("✅ MediaPipe 라이브러리 이미 로드됨");
-                updateAIStatus('ai');
-                resolve(true);
-                return;
-            }
-            
-            // 동적 로드 시도
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js';
-            script.onload = () => {
-                setTimeout(() => {
-                    if (window.tasksVision || window.Vision) {
-                        log("✅ MediaPipe 라이브러리 로드 성공");
-                        updateAIStatus('ai');
-                        resolve(true);
-                    } else {
-                        log("⚠️ MediaPipe 로드 확인 실패", "#f39c12");
-                        updateAIStatus('basic');
-                        resolve(false);
-                    }
-                }, 1000);
-            };
-            
-            script.onerror = () => {
-                log("❌ MediaPipe 라이브러리 로드 실패", "#e74c3c");
-                updateAIStatus('failed');
-                resolve(false);
-            };
-            
-            document.head.appendChild(script);
-        });
-    }
-    
-    // AI 모델 초기화
-    async function initAIModel() {
-        try {
-            log("AI 모델 초기화 중...");
-            updateStatus("AI 모델 초기화 중...", "loading");
-            
-            // MediaPipe 라이브러리 확인
-            const vision = window.tasksVision || window.Vision;
-            if (!vision) {
-                log("MediaPipe 라이브러리를 찾을 수 없습니다.", "#f39c12");
-                updateAIStatus('basic');
-                return false;
-            }
-            
-            // FilesetResolver 생성
-            const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-            );
-            
-            // TextRecognizer 생성
-            textRecognizer = await vision.TextRecognizer.createFromOptions(
-                filesetResolver,
-                {
-                    baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
-                        delegate: "GPU"
-                    },
-                    runningMode: "IMAGE"
-                }
-            );
-            
-            log("✅ AI 모델 초기화 완료!", "#2ecc71");
-            updateAIStatus('ai');
-            return true;
-        } catch (error) {
-            log(`⚠️ AI 모델 초기화 실패: ${error.message}`, "#f39c12");
-            updateAIStatus('basic');
-            textRecognizer = null;
-            return false;
-        }
-    }
-    
     // ========== 카메라 ==========
     
-    // 카메라 초기화
     async function initCamera() {
         try {
-            log("카메라 초기화 중...");
-            updateStatus("카메라 초기화 중...", "loading");
-            updateCameraStatus('loading');
+            debugLog('카메라 초기화 중...', 'debug');
+            updateStatus(cameraStatus, 'loading', '연결 중...');
             
-            // 카메라 제약 조건
             const constraints = {
                 video: {
                     facingMode: "environment",
                     width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    frameRate: { ideal: 30 }
+                    height: { ideal: 720 }
                 }
             };
             
-            // 카메라 스트림 요청
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
             videoTrack = stream.getVideoTracks()[0];
             
-            // 비디오 로드 대기
             await new Promise((resolve) => {
-                if (video.readyState >= 3) {
-                    resolve();
-                } else {
-                    video.onloadeddata = resolve;
-                }
+                if (video.readyState >= 3) resolve();
+                else video.onloadeddata = resolve;
             });
             
             // 카메라 기능 확인
@@ -1021,259 +770,174 @@
                 const caps = videoTrack.getCapabilities();
                 if (caps.torch) {
                     torchBtn.disabled = false;
-                    log("✅ 플래시 기능 사용 가능");
+                    debugLog('✅ 플래시 기능 사용 가능', 'info');
                 }
                 if (caps.focusMode && caps.focusMode.includes('manual')) {
                     macroBtn.disabled = false;
-                    log("✅ 수동 포커스 기능 사용 가능");
+                    debugLog('✅ 수동 포커스 기능 사용 가능', 'info');
                 }
             }
             
-            log("✅ 카메라 초기화 완료");
-            updateStatus("카메라 준비 완료", "ready");
-            updateCameraStatus('ready');
+            debugLog('✅ 카메라 초기화 완료', 'info');
+            updateStatus(cameraStatus, 'ready', '사용 가능');
             return true;
         } catch (error) {
-            let errorMsg = "카메라 오류";
-            if (error.name === 'NotAllowedError') {
-                errorMsg = "카메라 권한 필요";
-                log("카메라 접근 권한이 거부되었습니다", "#e74c3c");
-            } else if (error.name === 'NotFoundError') {
-                errorMsg = "카메라 없음";
-                log("카메라를 찾을 수 없습니다", "#e74c3c");
-            } else {
-                log(`카메라 오류: ${error.message}`, "#e74c3c");
-            }
-            
-            updateStatus(errorMsg, "error");
-            updateCameraStatus('error');
+            debugLog(`❌ 카메라 오류: ${error.message}`, 'error');
+            updateStatus(cameraStatus, 'error', '연결 실패');
             return false;
         }
     }
     
-    // ========== 이미지 처리 ==========
-    
-    // 이미지 캡처
-    function captureImage() {
-        const canvas = document.getElementById('temp-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // 캔버스 크기 설정
-        canvas.width = 400;
-        canvas.height = 400;
-        
-        // 비디오 크기 확인
-        if (!video.videoWidth || !video.videoHeight) {
-            throw new Error("카메라 영상이 준비되지 않았습니다");
-        }
-        
-        // 중앙 부분 캡처
-        const size = Math.min(video.videoWidth, video.videoHeight, 320);
-        const sx = (video.videoWidth - size) / 2;
-        const sy = (video.videoHeight - size) / 2;
-        
-        // 캔버스에 그리기
-        ctx.drawImage(video, sx, sy, size, size, 0, 0, canvas.width, canvas.height);
-        
-        return canvas;
-    }
-    
-    // 이미지 전처리 (OpenCV)
-    function preprocessImage(canvas) {
-        try {
-            if (typeof cv === 'undefined') {
-                return canvas;
-            }
-            
-            const src = cv.imread(canvas);
-            const dst = new cv.Mat();
-            
-            // 그레이스케일 변환
-            cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
-            
-            // 가우시안 블러
-            cv.GaussianBlur(dst, dst, new cv.Size(3, 3), 0);
-            
-            // 대비 향상
-            cv.convertScaleAbs(dst, dst, 1.3, 10);
-            
-            // 결과 적용
-            cv.imshow(canvas, dst);
-            
-            // 메모리 정리
-            src.delete();
-            dst.delete();
-            
-            return canvas;
-        } catch (error) {
-            console.warn("이미지 전처리 실패:", error);
-            return canvas;
-        }
-    }
-    
-    // 텍스트 인식 (AI 또는 기본)
-    async function recognizeText(image) {
-        // AI 모드
-        if (textRecognizer) {
-            try {
-                const result = await textRecognizer.recognize(image);
-                return result.paragraphs.map(p => p.text).join(" ") || "";
-            } catch (error) {
-                log(`AI 인식 오류: ${error.message}`, "#f39c12");
-                return "";
-            }
-        }
-        
-        // 기본 모드 - 샘플 텍스트 반환 (실제 구현시 OCR 필요)
-        const sampleTexts = [
-            "500원 2020년 대한민국",
-            "100원 2018년",
-            "50원 2015년",
-            "10원 2010년",
-            "500원 2022년",
-            "100원 2019년",
-            "50원 2016년",
-            "10원 2012년"
-        ];
-        
-        const randomIndex = Math.floor(Math.random() * sampleTexts.length);
-        return sampleTexts[randomIndex];
-    }
-    
-    // 동전 정보 추출
-    function extractCoinInfo(text) {
-        const numbers = text.match(/\d+/g) || [];
-        let amount = "미확인";
-        let year = "미확인";
-        
-        // 연도 찾기 (4자리 숫자)
-        numbers.forEach(n => {
-            if (n.length === 4) {
-                const num = parseInt(n);
-                if (num >= 1900 && num <= new Date().getFullYear()) {
-                    year = n;
-                }
-            }
-        });
-        
-        // 금액 찾기
-        numbers.forEach(n => {
-            const num = parseInt(n);
-            if ([10, 50, 100, 500].includes(num)) {
-                amount = n;
-            }
-        });
-        
-        // 기본값 설정
-        if (amount === "미확인") {
-            amount = ["10", "50", "100", "500"][Math.floor(Math.random() * 4)];
-        }
-        
-        if (year === "미확인") {
-            const currentYear = new Date().getFullYear();
-            year = (currentYear - Math.floor(Math.random() * 20)).toString();
-        }
-        
-        return { amount, year, text };
-    }
-    
     // ========== 메인 기능 ==========
     
-    // 동전 스캔
     async function scanCoin() {
-        if (isProcessing) {
-            log("⚠️ 이미 처리 중입니다. 잠시만 기다려주세요.", "#f39c12");
+        if (isProcessing || !isAppReady) {
+            debugLog('⚠️ 아직 처리할 수 없습니다', 'warn');
             return;
         }
         
-        if (!isAppReady) {
-            log("❌ 앱이 아직 준비되지 않았습니다.", "#e74c3c");
-            return;
-        }
-        
-        // 처리 시작
         isProcessing = true;
         scanBtn.disabled = true;
         scanBtn.innerHTML = "⏳ 분석 중...";
         
         try {
-            log("동전 스캔 시작...");
-            updateStatus("동전 분석 중...", "loading");
+            debugLog('동전 스캔 시작...', 'info');
             
             // 이미지 캡처
-            const canvas = captureImage();
+            const canvas = document.getElementById('temp-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 400;
+            canvas.height = 400;
             
-            // 이미지 전처리
-            const processedCanvas = preprocessImage(canvas);
+            const size = Math.min(video.videoWidth, video.videoHeight, 320);
+            const sx = (video.videoWidth - size) / 2;
+            const sy = (video.videoHeight - size) / 2;
             
-            // 텍스트 인식
-            const text = await recognizeText(processedCanvas);
-            log(`인식된 텍스트: "${text || '없음'}"`, aiMode === 'ai' ? "#2ecc71" : "#f39c12");
+            ctx.drawImage(video, sx, sy, size, size, 0, 0, canvas.width, canvas.height);
+            
+            // AI 인식 또는 기본 모드
+            let text = "기본 모드: 500원 2020년";
+            if (textRecognizer) {
+                try {
+                    const result = await textRecognizer.recognize(canvas);
+                    text = result.paragraphs.map(p => p.text).join(" ") || text;
+                    debugLog(`🤖 AI 인식 결과: "${text}"`, 'info');
+                } catch (aiError) {
+                    debugLog(`⚠️ AI 인식 실패: ${aiError.message}`, 'warn');
+                }
+            } else {
+                debugLog(`🔤 기본 모드 사용: "${text}"`, 'info');
+            }
             
             // 정보 추출
-            const { amount, year } = extractCoinInfo(text);
-            log(`추출된 정보: ${year}년 ${amount}원`, "#00ff00");
+            const numbers = text.match(/\d+/g) || [];
+            let amount = "미확인";
+            let year = "미확인";
             
-            // 이미지 저장
-            canvas.toBlob(async (blob) => {
-                if (!blob) {
-                    throw new Error("이미지 저장 실패");
-                }
-                
-                // DB에 저장
+            numbers.forEach(n => {
+                if (n.length === 4 && parseInt(n) >= 1900) year = n;
+                if (["10", "50", "100", "500"].includes(n)) amount = n;
+            });
+            
+            if (amount === "미확인") amount = ["10", "50", "100", "500"][Math.floor(Math.random() * 4)];
+            if (year === "미확인") year = (new Date().getFullYear() - Math.floor(Math.random() * 10)).toString();
+            
+            debugLog(`💰 추출된 정보: ${year}년 ${amount}원`, 'info');
+            
+            // 저장
+            canvas.toBlob((blob) => {
                 const tx = db.transaction("coins", "readwrite");
                 const store = tx.objectStore("coins");
                 
-                const coinData = {
+                store.add({
                     amount,
                     year,
                     image: blob,
                     text,
-                    time: new Date().toISOString(),
-                    mode: aiMode
-                };
-                
-                const request = store.add(coinData);
-                
-                request.onsuccess = () => {
-                    log(`✅ 동전 저장 완료: ${year}년 ${amount}원`, "#2ecc71");
-                    updateStatus(`${year}년 ${amount}원 저장됨`, "ready");
-                    
-                    // 목록 새로고침
-                    loadCoins();
-                    
-                    // 성공 효과
-                    scanBtn.classList.add('success-flash');
-                    setTimeout(() => {
-                        scanBtn.classList.remove('success-flash');
-                    }, 500);
-                };
-                
-                request.onerror = (e) => {
-                    log(`❌ 저장 실패: ${e.target.error}`, "#e74c3c");
-                    updateStatus("저장 실패", "error");
-                };
+                    time: new Date().toISOString()
+                });
                 
                 tx.oncomplete = () => {
-                    // 완료
+                    debugLog(`✅ 동전 저장 완료: ${year}년 ${amount}원`, 'info');
+                    loadCoins();
                 };
-                
             }, 'image/jpeg', 0.9);
             
         } catch (error) {
-            log(`❌ 스캔 실패: ${error.message}`, "#e74c3c");
-            updateStatus("스캔 실패", "error");
+            debugLog(`❌ 스캔 실패: ${error.message}`, 'error');
         } finally {
-            // 처리 종료
-            setTimeout(() => {
-                isProcessing = false;
-                scanBtn.disabled = false;
-                scanBtn.innerHTML = "📷 동전 스캔";
-            }, 1000);
+            isProcessing = false;
+            scanBtn.disabled = false;
+            scanBtn.innerHTML = "📷 동전 스캔";
         }
     }
     
-    // 라이트 토글
+    // ========== 앱 초기화 ==========
+    
+    async function initApp() {
+        try {
+            debugLog('=== 애플리케이션 초기화 시작 ===', 'debug');
+            
+            // 1. OpenCV 상태 확인
+            if (typeof cv !== 'undefined') {
+                updateStatus(opencvStatus, 'ready', '로드됨');
+                debugLog('✅ OpenCV 로드됨', 'info');
+            } else {
+                updateStatus(opencvStatus, 'error', '로드 실패');
+                debugLog('❌ OpenCV 로드 실패', 'error');
+            }
+            
+            // 2. MediaPipe 진단
+            diagnoseMediaPipe();
+            
+            // 3. MediaPipe 강제 로드 시도
+            const mediapipeLoaded = await loadMediaPipeForcibly();
+            
+            // 4. AI 모델 초기화 (성공 시)
+            let aiModelLoaded = false;
+            if (mediapipeLoaded) {
+                aiModelLoaded = await initAIModel();
+            }
+            
+            // 5. 데이터베이스 초기화
+            await initDatabase();
+            
+            // 6. 카메라 초기화
+            const cameraLoaded = await initCamera();
+            
+            if (!cameraLoaded) {
+                scanBtn.disabled = false;
+                scanBtn.innerHTML = "🔧 카메라 오류";
+                scanBtn.onclick = () => {
+                    alert('카메라 오류입니다. 권한을 확인해주세요.');
+                };
+                return;
+            }
+            
+            // 7. 이벤트 리스너 설정
+            scanBtn.onclick = scanCoin;
+            torchBtn.onclick = toggleTorch;
+            macroBtn.onclick = toggleMacro;
+            
+            // 8. 앱 준비 완료
+            isAppReady = true;
+            scanBtn.disabled = false;
+            
+            debugLog('✅ 애플리케이션 초기화 완료!', 'info');
+            debugLog(`📊 상태 요약: AI=${aiModelLoaded ? '활성' : '비활성'}, 카메라=${cameraLoaded ? '활성' : '비활성'}`, 'info');
+            
+        } catch (error) {
+            debugLog(`❌ 초기화 실패: ${error.message}`, 'error');
+            debugLog(`스택 트레이스: ${error.stack}`, 'debug');
+            
+            scanBtn.disabled = false;
+            scanBtn.innerHTML = "🔄 재시도";
+            scanBtn.onclick = () => location.reload();
+        }
+    }
+    
+    // ========== 보조 함수 ==========
+    
     async function toggleTorch() {
         if (!videoTrack) return;
         
@@ -1284,15 +948,12 @@
             });
             
             torchBtn.innerHTML = isTorchOn ? "💡 라이트 ON" : "🔦 라이트";
-            log(`라이트 ${isTorchOn ? '켜짐' : '꺼짐'}`);
+            debugLog(`라이트 ${isTorchOn ? '켜짐' : '꺼짐'}`, 'info');
         } catch (error) {
-            log(`라이트 제어 실패: ${error.message}`, "#f39c12");
-            isTorchOn = false;
-            torchBtn.innerHTML = "🔦 라이트";
+            debugLog(`라이트 제어 실패: ${error.message}`, 'error');
         }
     }
     
-    // 접사모드 토글
     async function toggleMacro() {
         if (!videoTrack) return;
         
@@ -1304,160 +965,78 @@
                     advanced: [{ focusMode: 'manual', focusDistance: 0.1 }]
                 });
                 macroBtn.innerHTML = "🔍 접사 ON";
-                log("접사모드 활성화");
+                debugLog("접사모드 활성화", 'info');
             } else {
                 await videoTrack.applyConstraints({
                     advanced: [{ focusMode: 'continuous' }]
                 });
                 macroBtn.innerHTML = "🔍 접사모드";
-                log("접사모드 비활성화");
+                debugLog("접사모드 비활성화", 'info');
             }
         } catch (error) {
-            log(`접사모드 제어 실패: ${error.message}`, "#f39c12");
-            isMacroOn = false;
-            macroBtn.innerHTML = "🔍 접사모드";
+            debugLog(`접사모드 제어 실패: ${error.message}`, 'error');
         }
-    }
-    
-    // ========== 앱 초기화 ==========
-    
-    async function initApp() {
-        try {
-            log("애플리케이션 초기화 시작...");
-            updateStatus("시스템 초기화 중...", "loading");
-            
-            // 1. 데이터베이스 초기화
-            await initDatabase();
-            
-            // 2. MediaPipe 라이브러리 로드
-            const libraryLoaded = await loadMediaPipeLibrary();
-            
-            // 3. AI 모델 초기화 (라이브러리가 로드된 경우)
-            if (libraryLoaded) {
-                await initAIModel();
-            } else {
-                showModal("AI 라이브러리 로드에 실패했습니다. 기본 모드로 진행하시겠습니까? 기본 모드에서는 샘플 데이터가 사용됩니다.");
-                return;
-            }
-            
-            // 4. 카메라 초기화
-            const cameraLoaded = await initCamera();
-            if (!cameraLoaded) {
-                scanBtn.disabled = false;
-                scanBtn.innerHTML = "🔧 카메라 오류";
-                scanBtn.onclick = () => {
-                    alert("카메라 오류 해결 방법:\n\n1. 브라우저 설정에서 카메라 권한 허용\n2. 기기에 카메라가 있는지 확인\n3. 페이지 새로고침\n\n모바일에서는 후면 카메라를 사용합니다.");
-                };
-                return;
-            }
-            
-            // 5. 이벤트 리스너 설정
-            scanBtn.onclick = scanCoin;
-            torchBtn.onclick = toggleTorch;
-            macroBtn.onclick = toggleMacro;
-            resetBtn.onclick = () => location.reload();
-            
-            // 6. 앱 준비 완료
-            isAppReady = true;
-            scanBtn.disabled = false;
-            
-            log("✅ 애플리케이션 초기화 완료!", "#2ecc71");
-            updateStatus("준비 완료! 동전을 스캔하세요.", "ready");
-            
-            // 사용법 안내
-            setTimeout(() => {
-                log("💡 사용법: 동전을 카메라 중앙의 원 안에 놓고 [동전 스캔] 버튼을 누르세요.", "#3498db");
-                log("💡 어두운 곳에서는 [라이트] 버튼으로 플래시를 켤 수 있습니다.", "#3498db");
-                log("💡 선명한 사진을 위해 [접사모드]를 사용하세요.", "#3498db");
-            }, 1500);
-            
-        } catch (error) {
-            log(`❌ 애플리케이션 초기화 실패: ${error.message}`, "#e74c3c");
-            updateStatus("초기화 실패", "error");
-            
-            scanBtn.disabled = false;
-            scanBtn.innerHTML = "🔄 재시도";
-            scanBtn.onclick = () => location.reload();
-        }
-    }
-    
-    // ========== 모달 기능 ==========
-    
-    function retryLoadLibrary() {
-        closeModal();
-        libraryRetryCount++;
-        
-        if (libraryRetryCount <= 3) {
-            log(`라이브러리 재시도 (${libraryRetryCount}/3)...`);
-            updateStatus("라이브러리 재시도 중...", "loading");
-            
-            // 새 스크립트 로드
-            const newScript = document.createElement('script');
-            newScript.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js';
-            newScript.onload = () => {
-                setTimeout(() => {
-                    if (window.tasksVision || window.Vision) {
-                        log("✅ 라이브러리 재시도 성공");
-                        initAIModel().then(() => {
-                            initCamera();
-                        });
-                    } else {
-                        showModal("라이브러리 로드에 실패했습니다. 기본 모드로 진행하시겠습니까?");
-                    }
-                }, 1000);
-            };
-            
-            document.head.appendChild(newScript);
-        } else {
-            showModal("라이브러리 로드에 여러 번 실패했습니다. 기본 모드로 진행하시겠습니까?");
-        }
-    }
-    
-    function useBasicMode() {
-        closeModal();
-        updateAIStatus('basic');
-        log("기본 모드로 진행합니다", "#f39c12");
-        updateStatus("기본 모드로 진행 중...", "loading");
-        
-        // 카메라 초기화 진행
-        initCamera();
     }
     
     // ========== 시작 ==========
     
     document.addEventListener('DOMContentLoaded', () => {
-        log("애플리케이션 로드 완료");
+        debugLog('페이지 로드 완료', 'info');
+        debugLog(`User Agent: ${navigator.userAgent}`, 'debug');
+        debugLog(`브라우저: ${navigator.userAgentData?.brands?.map(b => b.brand).join(', ') || '알 수 없음'}`, 'debug');
         
         // OpenCV 로드 확인
-        let opencvLoaded = false;
         const checkOpenCV = setInterval(() => {
             if (typeof cv !== 'undefined') {
-                opencvLoaded = true;
                 clearInterval(checkOpenCV);
-                log("✅ OpenCV 로드됨");
-                
-                // 앱 초기화 시작
                 setTimeout(initApp, 500);
             }
-        }, 500);
+        }, 100);
         
         // 10초 타임아웃
         setTimeout(() => {
-            if (!opencvLoaded) {
-                clearInterval(checkOpenCV);
-                log("⚠️ OpenCV 로드 시간 초과, 계속 진행...", "#f39c12");
-                initApp();
-            }
+            clearInterval(checkOpenCV);
+            debugLog('OpenCV 로드 타임아웃, 계속 진행', 'warn');
+            initApp();
         }, 10000);
     });
     
-    // 페이지 종료 시 정리
-    window.addEventListener('beforeunload', () => {
-        if (videoTrack) videoTrack.stop();
-        if (video.srcObject) {
-            video.srcObject.getTracks().forEach(track => track.stop());
+    // 전역 객체 덤프 함수 (디버깅용)
+    window.dumpMediaPipeInfo = function() {
+        debugLog('=== MediaPipe 객체 덤프 ===', 'debug');
+        
+        // tasksVision 객체 검사
+        if (window.tasksVision) {
+            debugLog('window.tasksVision:', 'info');
+            try {
+                const keys = Object.keys(window.tasksVision);
+                debugLog(`  키들: ${keys.join(', ')}`, 'info');
+                
+                // FilesetResolver 확인
+                if (window.tasksVision.FilesetResolver) {
+                    debugLog('  ✅ FilesetResolver 발견', 'info');
+                }
+                
+                // TextRecognizer 확인
+                if (window.tasksVision.TextRecognizer) {
+                    debugLog('  ✅ TextRecognizer 발견', 'info');
+                }
+            } catch (e) {
+                debugLog(`  객체 검사 오류: ${e.message}`, 'error');
+            }
         }
-    });
+        
+        // Vision 객체 검사
+        if (window.Vision && window.Vision !== window.tasksVision) {
+            debugLog('window.Vision:', 'info');
+            try {
+                const keys = Object.keys(window.Vision);
+                debugLog(`  키들: ${keys.join(', ')}`, 'info');
+            } catch (e) {
+                debugLog(`  객체 검사 오류: ${e.message}`, 'error');
+            }
+        }
+    };
 </script>
 </body>
 </html>
