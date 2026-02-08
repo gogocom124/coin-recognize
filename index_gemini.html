@@ -2,126 +2,193 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 동전 도감 v7.0 - Final Fix</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Coin Collector v8.0</title>
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
-        :root { --primary: #4285f4; --terminal: #1e1e1e; }
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; display: flex; flex-direction: column; align-items: center; }
-        header { background: #202124; color: white; width: 100%; text-align: center; padding: 15px; }
-        .viewport { position: relative; width: 90%; max-width: 400px; aspect-ratio: 1/1; margin: 20px; border-radius: 20px; overflow: hidden; border: 4px solid #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+        :root { --primary: #4285f4; --terminal: #1e1e1e; --success: #34a853; }
+        body { font-family: sans-serif; background: #f8f9fa; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        header { width: 100%; padding: 15px; background: #202124; color: white; text-align: center; }
+        .viewport { position: relative; width: 90%; max-width: 380px; aspect-ratio: 1/1; margin: 15px 0; border-radius: 20px; overflow: hidden; background: #000; border: 3px solid #ddd; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 220px; border: 2px dashed #00ff00; border-radius: 50%; }
-        .debug-panel { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; padding: 15px; border-radius: 10px; font-family: monospace; font-size: 12px; height: 150px; overflow-y: auto; margin-bottom: 20px; }
-        .btn-group { display: flex; gap: 10px; margin-bottom: 30px; }
-        button { padding: 12px 20px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; background: var(--primary); color: white; }
-        button:disabled { background: #ccc; }
-        #preview-canvas { width: 150px; height: 150px; border: 2px solid var(--primary); margin-bottom: 20px; display: block; }
+        .guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; border: 2px dashed #00ff00; border-radius: 50%; pointer-events: none; }
+        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 130px; overflow-y: auto; margin-bottom: 15px; }
+        .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 20px; }
+        button { padding: 12px 18px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; background: #fff; border: 1px solid #ccc; }
+        #scan-btn { background: var(--primary); color: white; border: none; }
+        button:disabled { background: #eee !important; color: #aaa !important; }
+        #preview-canvas { width: 150px; height: 150px; border: 2px solid var(--primary); border-radius: 10px; margin-bottom: 15px; background: #eee; }
+        .list-section { width: 95%; max-width: 600px; background: white; border-radius: 15px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 40px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
+        .coin-thumb { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
     </style>
 </head>
 <body>
 
-<header><h1>🪙 AI 동전 도감 v7.0</h1></header>
+<header><h1>🪙 AI 동전 도감 v8.0</h1></header>
 
 <div class="viewport">
     <video id="webcam" autoplay playsinline></video>
     <div class="guide"></div>
 </div>
 
-<div id="log" class="debug-panel">시스템 가동 대기 중...</div>
+<div id="debug-console" class="debug-section">> 시스템 안정화 버전(v8.0) 대기 중...</div>
 
 <canvas id="preview-canvas"></canvas>
 
 <div class="btn-group">
     <button id="scan-btn" disabled>📷 동전 스캔</button>
-    <button onclick="location.reload()">🔄 리셋</button>
+    <button id="torch-btn" disabled>🔦 라이트</button>
+    <button id="macro-btn" disabled>🔍 접사모드</button>
+    <button onclick="location.reload()" style="background:#6c757d; color:white;">🔄 앱 리셋</button>
+</div>
+
+<div class="list-section">
+    <table><tbody id="coin-list"></tbody></table>
 </div>
 
 <canvas id="hidden-canvas" style="display:none;"></canvas>
 
 <script type="module">
-    // Skypack을 통해 MediaPipe를 안전하게 로드
-    import vision from "https://cdn.skypack.dev/@mediapipe/tasks-vision";
+    import { TextRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
 
     const video = document.getElementById('webcam');
-    const logPanel = document.getElementById('log');
+    const debugConsole = document.getElementById('debug-console');
     const scanBtn = document.getElementById('scan-btn');
+    const torchBtn = document.getElementById('torch-btn');
+    const macroBtn = document.getElementById('macro-btn');
+    const coinList = document.getElementById('coin-list');
     const previewCanvas = document.getElementById('preview-canvas');
 
-    let textRecognizer, videoTrack;
+    let textRecognizer, db, videoTrack;
+    let isTorchOn = false, isMacroOn = false;
 
-    function log(msg, type = 'info') {
-        const color = type === 'error' ? '#ff4757' : (type === 'success' ? '#2ed573' : '#00ff00');
-        logPanel.innerHTML += `<div style="color:${color}">> ${msg}</div>`;
-        logPanel.scrollTop = logPanel.scrollHeight;
+    function log(msg, color = "#00ff00") {
+        debugConsole.innerHTML += `<div style="color:${color}">> ${msg}</div>`;
+        debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    async function init() {
+    async function initApp() {
         try {
-            log("1. AI 모듈 로드 중...", 'info');
-            const { TextRecognizer, FilesetResolver } = vision;
-            
-            const filesetResolver = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+            log("1. 데이터베이스 준비 중...");
+            const dbReq = indexedDB.open("CoinDB_v8", 1);
+            dbReq.onupgradeneeded = (e) => e.target.result.createObjectStore("coins", { keyPath: "id", autoIncrement: true });
+            db = await new Promise((res) => dbReq.onsuccess = (e) => res(e.target.result));
+            renderTable();
+            log("✅ DB 준비 완료");
+
+            log("2. AI 엔진(MediaPipe) 최신판 로딩 중...");
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
             );
-            
-            textRecognizer = await TextRecognizer.createFromOptions(filesetResolver, {
+            textRecognizer = await TextRecognizer.createFromOptions(vision, {
                 baseOptions: {
                     modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
                     delegate: "GPU"
                 }
             });
-            log("✅ AI 로드 성공!", 'success');
+            log("✅ AI 엔진 로드 성공", "#4285f4");
 
-            log("2. 카메라 연결 중...", 'info');
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            log("3. 카메라 시스템 가동 중...");
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+            });
             video.srcObject = stream;
             videoTrack = stream.getVideoTracks()[0];
             
+            // 하드웨어 버튼 활성화 체크
+            const caps = videoTrack.getCapabilities();
+            if (caps.torch) torchBtn.disabled = false;
+            if (caps.focusMode && caps.focusMode.includes('manual')) macroBtn.disabled = false;
             scanBtn.disabled = false;
-            log("🚀 모든 준비 완료!", 'success');
+
+            log("🚀 모든 시스템 정상! 동전을 스캔하세요.", "#fff");
 
         } catch (err) {
-            log("❌ 치명적 오류: " + err.message, 'error');
+            log("❌ 치명적 오류: " + err.message, "#ea4335");
+            console.error(err);
         }
     }
 
+    // 스캔 버튼 동작
     scanBtn.onclick = async () => {
-        log("🔍 분석 시작...", 'info');
+        log("🔍 이미지 분석 및 숫자 복원 중...");
         const ctx = previewCanvas.getContext('2d');
         previewCanvas.width = 300; previewCanvas.height = 300;
         
-        // 1. 이미지 캡처
+        // 가이드라인 영역 크롭
         ctx.drawImage(video, (video.videoWidth-300)/2, (video.videoHeight-300)/2, 300, 300, 0, 0, 300, 300);
 
-        // 2. OpenCV 전처리 (보내주신 사진의 '빈 숫자'를 채우는 로직 추가)
+        // [OpenCV 전처리] 속이 빈 글자를 채우는 핵심 로직
         if (typeof cv !== 'undefined') {
             let src = cv.imread(previewCanvas);
             cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY);
             
-            // 숫자를 굵게 만들어주는 처리 (Closing)
+            // 1. 대비 강화
+            cv.convertScaleAbs(src, src, 1.4, 10);
+            // 2. 이진화 및 글자 팽창(Dilation)으로 빈 틈 채우기
             let M = cv.Mat.ones(3, 3, cv.CV_8U);
             cv.adaptiveThreshold(src, src, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-            cv.morphologyEx(src, src, cv.MORPH_CLOSE, M); // 빈 틈 메우기
+            cv.morphologyEx(src, src, cv.MORPH_CLOSE, M); // Closing 연산으로 숫자 메우기
             
             cv.imshow(previewCanvas, src);
             src.delete(); M.delete();
         }
 
-        // 3. AI 인식
+        // AI 판독
         const result = await textRecognizer.recognize(previewCanvas);
         const text = result.paragraphs.map(p => p.text).join(" ");
-        log(`📡 인식 원문: "${text}"`, 'success');
+        log(`📡 인식 원문: "${text || '감지 안됨'}"`, "#ffc107");
+        
+        const numbers = text.match(/\d+/g) || [];
+        let amount = "미확인", year = "미확인";
+        numbers.forEach(n => {
+            if (n.length === 4 && (n.startsWith("19") || n.startsWith("20"))) year = n;
+            if (["10", "50", "100", "500"].includes(n)) amount = n;
+        });
 
-        // 4. 결과 분류
-        const year = text.match(/19\d{2}|20\d{2}/)?.[0] || "미확인";
-        const amount = text.match(/10|50|100|500/)?.[0] || "미확인";
-        log(`💰 최종분류: ${amount}원 / ${year}년`);
+        // 결과 저장
+        previewCanvas.toBlob((blob) => {
+            const tx = db.transaction("coins", "readwrite");
+            tx.objectStore("coins").add({ amount, year, image: blob, time: new Date() });
+            tx.oncomplete = () => { log(`💾 저장됨: ${year}년 ${amount}원`, "var(--success)"); renderTable(); };
+        }, 'image/webp');
     };
 
-    // OpenCV 준비 대기
-    if (typeof cv !== 'undefined' && cv.onRuntimeInitialized) init();
-    else setTimeout(init, 1500);
+    // 라이트 및 접사 버튼
+    torchBtn.onclick = async () => {
+        isTorchOn = !isTorchOn;
+        await videoTrack.applyConstraints({ advanced: [{ torch: isTorchOn }] });
+        log(`🔦 라이트 ${isTorchOn ? 'ON' : 'OFF'}`);
+    };
+
+    macroBtn.onclick = async () => {
+        isMacroOn = !isMacroOn;
+        const caps = videoTrack.getCapabilities();
+        await videoTrack.applyConstraints({
+            advanced: [{ focusMode: isMacroOn ? "manual" : "continuous", focusDistance: isMacroOn ? (caps.focusDistance?.min || 0) : undefined }]
+        });
+        log(`🔍 접사 ${isMacroOn ? 'ON' : 'OFF'}`);
+    };
+
+    function renderTable() {
+        const tx = db.transaction("coins", "readonly");
+        tx.objectStore("coins").getAll().onsuccess = (e) => {
+            const coins = e.target.result.sort((a,b) => parseInt(a.year || 9999) - parseInt(b.year || 9999));
+            coinList.innerHTML = coins.map(c => `
+                <tr>
+                    <td><img src="${URL.createObjectURL(c.image)}" class="coin-thumb"></td>
+                    <td>${c.amount}원</td>
+                    <td><b>${c.year}년</b></td>
+                </tr>
+            `).join('');
+        };
+    }
+
+    // 초기화 시작 (OpenCV 로드 확인)
+    if (typeof cv !== 'undefined' && cv.onRuntimeInitialized) initApp();
+    else setTimeout(initApp, 1500);
 </script>
 </body>
 </html>
