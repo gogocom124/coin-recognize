@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Coin Collector - MediaPipe Edition</title>
+    <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
+    <style>
+        :root { --primary: #4285f4; --bg: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; align-items: center; }
+        header { width: 100%; padding: 20px; background: #202124; color: white; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        
+        /* 카메라 및 가이드라인 */
+        .viewport { position: relative; width: 95%; max-width: 400px; aspect-ratio: 1/1; margin: 20px 0; border-radius: 20px; overflow: hidden; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); 
+                    mask: radial-gradient(circle 110px at center, transparent 100%, black 100%);
+                    -webkit-mask: radial-gradient(circle 110px at center, transparent 99%, black 100%); }
+        .guide-circle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                        width: 220px; height: 220px; border: 3px dashed #00ff00; border-radius: 50%; }
+
+        /* 제어 버튼 */
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 20px; }
+        #status { font-size: 14px; color: #5f6368; font-weight: bold; }
+        .btn-group { display: flex; gap: 10px; }
+        button { padding: 12px 20px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        #scan-btn { background: var(--primary); color: white; }
+        #scan-btn:disabled { background: #dadce0; }
+        .tool-btn { background: #fff; border: 1px solid #dadce0; color: #3c4043; }
+
+        /* 도감 테이블 */
+        .list-section { width: 95%; max-width: 600px; background: white; border-radius: 15px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 50px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; border-bottom: 2px solid #eee; padding: 10px; color: #5f6368; }
+        td { padding: 12px 10px; border-bottom: 1px solid #f1f3f4; text-align: left; }
+        .coin-thumb { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<header><h1>🪙 AI 동전 도감</h1></header>
+
+<div class="viewport">
+    <video id="webcam" autoplay playsinline></video>
+    <div class="overlay"></div>
+    <div class="guide-circle"></div>
+</div>
+
+<div class="controls">
+    <div id="status">AI 엔진 준비 중...</div>
+    <div class="btn-group">
+        <button id="scan-btn" disabled>📷 동전 스캔</button>
+        <button id="torch-btn" class="tool-btn">🔦 라이트</button>
+        <button id="macro-btn" class="tool-btn">🔍 접사</button>
+    </div>
+</div>
+
+<div class="list-section">
+    <h3>내 동전 목록 (오래된 순)</h3>
+    <table>
+        <thead><tr><th>사진</th><th>금액</th><th>연도</th></tr></thead>
+        <tbody id="coin-list"></tbody>
+    </table>
+</div>
+
+<canvas id="temp-canvas" style="display:none;"></canvas>
+
+<script type="module">
+    // MediaPipe 라이브러리 로드
+    import { TextRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17";
+
+    const video = document.getElementById('webcam');
+    const status = document.getElementById('status');
+    const scanBtn = document.getElementById('scan-btn');
+    const torchBtn = document.getElementById('torch-btn');
+    const macroBtn = document.getElementById('macro-btn');
+    const coinList = document.getElementById('coin-list');
+
+    let textRecognizer, db, videoTrack, isTorchOn = false, isMacroOn = false;
+
+    // 1. AI 및 DB 초기화
+    async function initApp() {
+        try {
+            // IndexedDB 설정
+            const dbReq = indexedDB.open("CoinDB", 1);
+            dbReq.onupgradeneeded = (e) => e.target.result.createObjectStore("coins", { keyPath: "id", autoIncrement: true });
+            dbReq.onsuccess = (e) => { db = e.target.result; renderTable(); };
+
+            // MediaPipe OCR 엔진 로드
+            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm");
+            textRecognizer = await TextRecognizer.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
+                    delegate: "GPU"
+                }
+            });
+
+            // 카메라 시작
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = stream;
+            videoTrack = stream.getVideoTracks()[0];
+            
+            status.innerText = "✅ 스캔 준비 완료";
+            scanBtn.disabled = false;
+        } catch (err) {
+            status.innerText = "❌ 초기화 오류: " + err.message;
+        }
+    }
+
+    // 2. 스캔 및 분석 로직
+    scanBtn.onclick = async () => {
+        status.innerText = "⚡ AI 분석 중...";
+        const canvas = document.getElementById('temp-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 300; canvas.height = 300;
+        
+        // 가이드라인 영역 크롭
+        const sx = (video.videoWidth - 300) / 2;
+        const sy = (video.videoHeight - 300) / 2;
+        ctx.drawImage(video, sx, sy, 300, 300, 0, 0, 300, 300);
+
+        // [OpenCV 전처리] 속이 빈 글자를 채우기 위한 대비 강화
+        let src = cv.imread(canvas);
+        cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY);
+        cv.convertScaleAbs(src, src, 1.2, 10); // 대비 증가
+        cv.imshow(canvas, src);
+        src.delete();
+
+        // [AI OCR] 구글 엔진 가동
+        const result = await textRecognizer.recognize(canvas);
+        const detectedText = result.paragraphs.map(p => p.text).join(" ");
+        const numbers = detectedText.match(/\d+/g) || [];
+
+        let amount = "미확인", year = "미확인";
+        numbers.forEach(n => {
+            if (n.length === 4 && (n.startsWith("19") || n.startsWith("20"))) year = n;
+            if (["10", "50", "100", "500"].includes(n)) amount = n;
+        });
+
+        // [저장]
+        canvas.toBlob((blob) => {
+            const tx = db.transaction("coins", "readwrite");
+            tx.objectStore("coins").add({ amount, year, image: blob, time: new Date() });
+            tx.oncomplete = () => {
+                status.innerText = `✅ 발견! ${amount}원 (${year}년)`;
+                renderTable();
+            };
+        }, 'image/webp');
+    };
+
+    // 3. 라이트 & 접사 제어
+    torchBtn.onclick = async () => {
+        isTorchOn = !isTorchOn;
+        await videoTrack.applyConstraints({ advanced: [{ torch: isTorchOn }] });
+        torchBtn.innerText = isTorchOn ? "🔦 라이트 ON" : "🔦 라이트 OFF";
+    };
+
+    macroBtn.onclick = async () => {
+        isMacroOn = !isMacroOn;
+        const caps = videoTrack.getCapabilities();
+        await videoTrack.applyConstraints({
+            advanced: [{ 
+                focusMode: isMacroOn ? "manual" : "continuous",
+                focusDistance: isMacroOn ? (caps.focusDistance?.min || 0) : undefined 
+            }]
+        });
+        macroBtn.innerText = isMacroOn ? "🔍 접사 ON" : "🔍 접사 OFF";
+    };
+
+    // 4. 테이블 렌더링 (오래된 순)
+    function renderTable() {
+        const tx = db.transaction("coins", "readonly");
+        tx.objectStore("coins").getAll().onsuccess = (e) => {
+            const coins = e.target.result.sort((a,b) => parseInt(a.year || 9999) - parseInt(b.year || 9999));
+            coinList.innerHTML = coins.map(c => `
+                <tr>
+                    <td><img src="${URL.createObjectURL(c.image)}" class="coin-thumb"></td>
+                    <td>${c.amount}원</td>
+                    <td><b>${c.year}년</b></td>
+                </tr>
+            `).join('');
+        };
+    }
+
+    initApp();
+</script>
+</body>
+</html>
