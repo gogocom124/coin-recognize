@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Coin Collector v9.0</title>
+    <title>AI Coin Collector v11.0</title>
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         :root { --primary: #4285f4; --terminal: #1e1e1e; }
@@ -11,135 +11,95 @@
         header { width: 100%; padding: 15px; background: #202124; color: white; text-align: center; }
         .viewport { position: relative; width: 90%; max-width: 380px; aspect-ratio: 1/1; margin: 15px 0; border-radius: 20px; overflow: hidden; background: #000; border: 3px solid #ddd; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 220px; border: 2px dashed #00ff00; border-radius: 50%; pointer-events: none; }
-        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 150px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #333; }
-        .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 20px; }
-        button { padding: 12px 18px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; background: #fff; border: 1px solid #ccc; }
-        #scan-btn { background: var(--primary); color: white; }
-        button:disabled { background: #eee !important; color: #aaa !important; }
-        .list-section { width: 95%; max-width: 600px; background: white; border-radius: 15px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .coin-thumb { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
+        .guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; border: 2px dashed #00ff00; border-radius: 50%; pointer-events: none; }
+        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 150px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #333; }
+        button { padding: 12px 20px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; background: var(--primary); color: white; margin-bottom: 20px; }
+        button:disabled { background: #ccc; }
     </style>
 </head>
 <body>
 
-<header><h1>🪙 AI 동전 도감 v9.0</h1></header>
+<header><h1>🪙 AI 동전 도감 v11.0</h1></header>
 
 <div class="viewport">
     <video id="webcam" autoplay playsinline></video>
     <div class="guide"></div>
 </div>
 
-<div id="debug-console" class="debug-section">> [v9.0] 스크립트 로딩 대기 중...</div>
+<div id="log" class="debug-section">> [v11.0] 시스템 시동 중...</div>
 
-<div class="btn-group">
-    <button id="scan-btn" disabled>📷 동전 스캔</button>
-    <button id="torch-btn" disabled>🔦 라이트</button>
-    <button id="macro-btn" disabled>🔍 접사모드</button>
-    <button onclick="location.reload()" style="background:#6c757d; color:white;">🔄 앱 재시작</button>
-</div>
-
-<div class="list-section">
-    <table><tbody id="coin-list"></tbody></table>
-</div>
+<button id="scan-btn" disabled>📷 동전 스캔</button>
 
 <canvas id="temp-canvas" style="display:none;"></canvas>
 
 <script type="module">
-    // [해결책] 가장 안정적인 esm.sh 주소로 변경하여 'export' 에러를 방지합니다.
-    import { TextRecognizer, FilesetResolver } from "https://esm.sh/@mediapipe/tasks-vision@0.10.17";
+    // esm.sh 대신 가장 안정적인 Skypack 주소를 사용하되, 이름을 개별적으로 부르지 않습니다.
+    import * as tasksVision from "https://cdn.skypack.dev/@mediapipe/tasks-vision@0.10.17";
 
     const video = document.getElementById('webcam');
-    const debugConsole = document.getElementById('debug-console');
+    const logPanel = document.getElementById('log');
     const scanBtn = document.getElementById('scan-btn');
-    const torchBtn = document.getElementById('torch-btn');
-    const macroBtn = document.getElementById('macro-btn');
-    const coinList = document.getElementById('coin-list');
+
+    let textRecognizer;
 
     function log(msg, color = "#00ff00") {
-        debugConsole.innerHTML += `<div style="color:${color}">> ${msg}</div>`;
-        debugConsole.scrollTop = debugConsole.scrollHeight;
+        logPanel.innerHTML += `<div style="color:${color}">> ${msg}</div>`;
+        logPanel.scrollTop = logPanel.scrollHeight;
     }
 
-    async function startApp() {
-        log("🚀 1단계: 스크립트 실행 시작", "#fff");
-        
+    async function init() {
         try {
-            log("2단계: 데이터베이스 연결 중...");
-            const dbReq = indexedDB.open("CoinDB_v9", 1);
-            dbReq.onupgradeneeded = (e) => e.target.result.createObjectStore("coins", { keyPath: "id", autoIncrement: true });
-            const db = await new Promise((res) => dbReq.onsuccess = (e) => res(e.target.result));
-            log("✅ DB 준비 완료");
+            log("1. 라이브러리 상자 개봉 중...");
+            // 가져온 tasksVision 상자 안에 무엇이 있는지 확인
+            log("내부 구성 요소 확인: " + Object.keys(tasksVision).join(", "));
+            
+            // 상자 안에서 필요한 도구들을 직접 꺼냅니다.
+            const TextRecognizer = tasksVision.TextRecognizer;
+            const FilesetResolver = tasksVision.FilesetResolver;
 
-            log("3단계: AI 엔진 초기화 중...");
+            if (!TextRecognizer) {
+                throw new Error("TextRecognizer 도구를 찾을 수 없습니다. (라이브러리 구조 문제)");
+            }
+
+            log("2. AI 엔진 데이터(WASM) 준비 중...");
             const vision = await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.17/wasm"
             );
-            const textRecognizer = await TextRecognizer.createFromOptions(vision, {
+            
+            log("3. 텍스트 인식기 가동 중...");
+            textRecognizer = await TextRecognizer.createFromOptions(vision, {
                 baseOptions: {
                     modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
                     delegate: "GPU"
                 }
             });
-            log("✅ AI 엔진 로드 성공", "#4285f4");
 
-            log("4단계: 카메라 구동 중...");
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" } 
-            });
+            log("4. 카메라 시스템 구동 중...");
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
-            const videoTrack = stream.getVideoTracks()[0];
             
-            // 버튼 활성화
-            const caps = videoTrack.getCapabilities();
-            if (caps.torch) torchBtn.disabled = false;
-            if (caps.focusMode && caps.focusMode.includes('manual')) macroBtn.disabled = false;
             scanBtn.disabled = false;
-
-            log("✨ 모든 준비 완료! 스캔을 시작하세요.", "#fff");
-
-            // 스캔 로직
-            scanBtn.onclick = async () => {
-                log("🔍 분석 중...");
-                const canvas = document.getElementById('temp-canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = 300; canvas.height = 300;
-                ctx.drawImage(video, (video.videoWidth-300)/2, (video.videoHeight-300)/2, 300, 300, 0, 0, 300, 300);
-
-                const result = await textRecognizer.recognize(canvas);
-                const text = result.paragraphs.map(p => p.text).join(" ");
-                log(`📡 원문: "${text}"`, "#ffc107");
-                
-                // 간단한 분류 및 저장 (화면 표시용)
-                const year = text.match(/19\d{2}|20\d{2}/)?.[0] || "미확인";
-                const amount = text.match(/10|50|100|500/)?.[0] || "미확인";
-                
-                canvas.toBlob((blob) => {
-                    const tx = db.transaction("coins", "readwrite");
-                    tx.objectStore("coins").add({ amount, year, image: blob, time: new Date() });
-                    tx.oncomplete = () => {
-                        log(`💾 저장: ${year}년 ${amount}원`);
-                        // 테이블 갱신 로직 생략
-                    };
-                }, 'image/webp');
-            };
-
-            torchBtn.onclick = async () => {
-                const isOn = videoTrack.getSettings().torch;
-                await videoTrack.applyConstraints({ advanced: [{ torch: !isOn }] });
-                log(`🔦 라이트 ${!isOn ? 'ON' : 'OFF'}`);
-            };
+            log("✨ 모든 시스템 준비 완료!", "#fff");
 
         } catch (err) {
-            log("❌ 치명적 오류 발생: " + err.message, "#ff4757");
-            log("💡 팁: 시크릿 모드에서 다시 시도해 보세요.");
+            log("❌ 치명적 오류: " + err.message, "#ff4757");
             console.error(err);
         }
     }
 
-    // 초기화 대기
-    if (typeof cv !== 'undefined' && cv.onRuntimeInitialized) startApp();
-    else setTimeout(startApp, 1500);
+    scanBtn.onclick = async () => {
+        log("🔍 이미지 스캔 및 분석 중...");
+        const canvas = document.getElementById('temp-canvas');
+        canvas.width = 300; canvas.height = 300;
+        canvas.getContext('2d').drawImage(video, (video.videoWidth-300)/2, (video.videoHeight-300)/2, 300, 300, 0, 0, 300, 300);
+
+        const result = await textRecognizer.recognize(canvas);
+        const text = result.paragraphs.map(p => p.text).join(" ");
+        log(`📡 인식 원문: "${text || '글자 없음'}"`, "#ffc107");
+    };
+
+    // OpenCV 로딩을 기다리며 실행
+    setTimeout(init, 1500);
 </script>
 </body>
 </html>
