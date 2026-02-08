@@ -6,8 +6,8 @@
     <title>AI 동전 도감 v5.0</title>
     <!-- OpenCV 라이브러리 -->
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
-    <!-- MediaPipe 라이브러리 (안정적인 버전) -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js"></script>
+    <!-- MediaPipe 라이브러리 (unpkg CDN 사용) -->
+    <script src="https://unpkg.com/@mediapipe/tasks-vision@0.10.3/vision_bundle.js"></script>
     <style>
         :root {
             --primary: #4285f4;
@@ -388,7 +388,7 @@
         </div>
         
         <footer>
-            AI 동전 인식 시스템 v5.0 | MediaPipe v0.10.3 사용 | 카메라 권한 필요
+            AI 동전 인식 시스템 v5.0 | MediaPipe v0.10.3 (unpkg) | 카메라 권한 필요
         </footer>
     </div>
 
@@ -454,57 +454,126 @@
             }
         }
         
-        // ========== MediaPipe 강제 로드 ==========
+        // ========== MediaPipe 강제 로드 (멀티 CDN 지원) ==========
         async function forceLoadMediaPipe() {
-            log('MediaPipe 강제 로드 시작...', 'warn');
-            updateStatus(mediapipeStatus, 'loading', '강제 로드 중...');
+            log('MediaPipe 강제 로드 시작 (멀티 CDN)...', 'warn');
+            updateStatus(mediapipeStatus, 'loading', '멀티 CDN 시도 중...');
             
             // 현재 존재하는 스크립트 제거
             const existingScripts = document.querySelectorAll('script[src*="mediapipe"], script[src*="vision"]');
             existingScripts.forEach(script => script.remove());
             
-            // 새로운 스크립트 로드
-            return new Promise((resolve) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js';
+            // 여러 CDN URL 시도
+            const cdnUrls = [
+                'https://unpkg.com/@mediapipe/tasks-vision@0.10.3/vision_bundle.js',
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js',
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2/vision_bundle.js',
+                'https://unpkg.com/@mediapipe/tasks-vision@0.10.2/vision_bundle.js'
+            ];
+            
+            let success = false;
+            
+            for (let i = 0; i < cdnUrls.length; i++) {
+                const url = cdnUrls[i];
+                log(`CDN 시도 ${i+1}/${cdnUrls.length}: ${url}`, 'info');
                 
-                script.onload = async () => {
-                    log('MediaPipe 스크립트 로드 완료, 객체 확인 중...', 'info');
-                    
-                    // 객체 확인 대기
-                    setTimeout(async () => {
-                        if (window.tasksVision || window.Vision) {
-                            log('✅ MediaPipe 객체 발견!', 'success');
-                            updateStatus(mediapipeStatus, 'success', '로드 성공');
-                            
-                            // AI 모델 재초기화
-                            const aiLoaded = await initAIModel();
-                            if (aiLoaded) {
-                                log('AI 모델 재초기화 완료!', 'success');
-                                updateAIMode('ai');
-                                alert('✅ AI 기능이 활성화되었습니다!');
-                            } else {
-                                log('AI 모델 초기화 실패', 'error');
-                                updateAIMode('basic');
-                            }
-                            resolve(true);
-                        } else {
-                            log('❌ MediaPipe 객체를 찾을 수 없음', 'error');
-                            updateStatus(mediapipeStatus, 'error', '로드 실패');
-                            updateAIMode('failed');
-                            resolve(false);
-                        }
-                    }, 2000);
+                try {
+                    const loaded = await loadScriptWithTimeout(url, 10000); // 10초 타임아웃
+                    if (loaded) {
+                        success = true;
+                        log(`✅ CDN 로드 성공: ${url}`, 'success');
+                        break;
+                    }
+                } catch (error) {
+                    log(`❌ CDN 실패 ${i+1}: ${error.message}`, 'error');
+                }
+            }
+            
+            if (success) {
+                // 객체 확인
+                await waitForMediaPipeObjects();
+                updateStatus(mediapipeStatus, 'success', '로드 성공');
+                
+                // AI 모델 재초기화
+                const aiLoaded = await initAIModel();
+                if (aiLoaded) {
+                    log('AI 모델 재초기화 완료!', 'success');
+                    updateAIMode('ai');
+                    alert('✅ AI 기능이 활성화되었습니다!');
+                } else {
+                    log('AI 모델 초기화 실패', 'error');
+                    updateAIMode('basic');
+                }
+            } else {
+                log('❌ 모든 CDN 로드 실패', 'error');
+                updateStatus(mediapipeStatus, 'error', '모든 CDN 실패');
+                updateAIMode('failed');
+                alert('⚠️ 모든 CDN에서 MediaPipe를 로드할 수 없습니다.\n인터넷 연결을 확인하고 다시 시도해주세요.');
+            }
+            
+            return success;
+        }
+        
+        // 스크립트 로드 헬퍼 함수
+        function loadScriptWithTimeout(url, timeout) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = url;
+                
+                const timeoutId = setTimeout(() => {
+                    script.remove();
+                    reject(new Error(`타임아웃 (${timeout}ms)`));
+                }, timeout);
+                
+                script.onload = () => {
+                    clearTimeout(timeoutId);
+                    // 스크립트 로드 후 잠시 대기
+                    setTimeout(() => resolve(true), 1000);
                 };
                 
                 script.onerror = () => {
-                    log('❌ MediaPipe 스크립트 로드 실패', 'error');
-                    updateStatus(mediapipeStatus, 'error', '로드 실패');
-                    updateAIMode('failed');
-                    resolve(false);
+                    clearTimeout(timeoutId);
+                    reject(new Error('스크립트 로드 실패'));
                 };
                 
                 document.head.appendChild(script);
+            });
+        }
+        
+        // MediaPipe 객체 확인 대기
+        async function waitForMediaPipeObjects() {
+            return new Promise((resolve) => {
+                let attempts = 0;
+                const maxAttempts = 20;
+                
+                function check() {
+                    attempts++;
+                    
+                    // 다양한 MediaPipe 객체 이름 확인
+                    const mpObjects = [
+                        'tasksVision',
+                        'Vision',
+                        'mediapipe',
+                        'mp'
+                    ];
+                    
+                    for (const objName of mpObjects) {
+                        if (window[objName]) {
+                            log(`✅ MediaPipe 객체 발견: ${objName}`, 'success');
+                            resolve(true);
+                            return;
+                        }
+                    }
+                    
+                    if (attempts < maxAttempts) {
+                        setTimeout(check, 500);
+                    } else {
+                        log('❌ MediaPipe 객체를 찾을 수 없음', 'error');
+                        resolve(false);
+                    }
+                }
+                
+                check();
             });
         }
         
@@ -1026,6 +1095,12 @@
         document.addEventListener('DOMContentLoaded', () => {
             log('페이지 로드 완료', 'info');
             log(`브라우저: ${navigator.userAgent}`, 'debug');
+            
+            // 네트워크 상태 확인
+            if (!navigator.onLine) {
+                log('⚠️ 오프라인 상태입니다. 네트워크 연결을 확인하세요.', 'warn');
+                alert('인터넷 연결이 필요합니다. 네트워크를 확인해주세요.');
+            }
             
             initApp();
         });
