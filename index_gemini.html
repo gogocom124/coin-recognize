@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Coin Collector v5.0</title>
+    <title>AI Coin Collector v6.0</title>
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js" crossorigin="anonymous"></script>
     <style>
         :root { --primary: #4285f4; --terminal: #1e1e1e; }
         body { font-family: sans-serif; background: #f8f9fa; margin: 0; display: flex; flex-direction: column; align-items: center; }
@@ -29,7 +28,7 @@
 </head>
 <body>
 
-<header><h1>🪙 동전 도감 v5.0</h1></header>
+<header><h1>🪙 동전 도감 v6.0</h1></header>
 
 <div class="viewport">
     <video id="webcam" autoplay playsinline></video>
@@ -37,7 +36,7 @@
     <div class="guide-circle"></div>
 </div>
 
-<div id="debug-console" class="debug-section">🛠️ v5.0 시스템 대기 중...</div>
+<div id="debug-console" class="debug-section">🚀 v6.0 시스템 가동 대기 중...</div>
 
 <div class="btn-group">
     <button id="scan-btn" disabled>📷 스캔 시작</button>
@@ -52,8 +51,9 @@
 
 <canvas id="temp-canvas" style="display:none;"></canvas>
 
-<script>
-    // 이제 import 문법을 쓰지 않습니다. (에러 방지 핵심)
+<script type="module">
+    import vision from "https://cdn.skypack.dev/@mediapipe/tasks-vision";
+
     const video = document.getElementById('webcam');
     const debugConsole = document.getElementById('debug-console');
     const scanBtn = document.getElementById('scan-btn');
@@ -69,49 +69,46 @@
         debugConsole.scrollTop = debugConsole.scrollHeight;
     }
 
-    async function startApp() {
+    async function init() {
         try {
-            log("1. AI 라이브러리 체크 중...");
-            // 라이브러리가 로드되었는지 전역 객체(tasksVision) 확인
-            const vision = window.tasksVision;
-            if (!vision) {
-                throw new Error("라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하세요.");
-            }
-            log("✅ AI 라이브러리 감지 성공");
+            log("1. 인공지능 모듈 연결 중...");
+            const { TextRecognizer, FilesetResolver } = vision;
+            if (!TextRecognizer) throw new Error("도구를 가져오지 못했습니다.");
+            log("✅ AI 모듈 감지 성공");
 
-            log("2. 데이터베이스 초기화 중...");
+            log("2. 데이터베이스 연결 중...");
             const dbReq = indexedDB.open("CoinDB", 1);
             dbReq.onupgradeneeded = (e) => e.target.result.createObjectStore("coins", { keyPath: "id", autoIncrement: true });
             db = await new Promise((res) => dbReq.onsuccess = (e) => res(e.target.result));
             renderTable();
             log("✅ DB 준비 완료");
 
-            log("3. AI 엔진 설정 중 (수 초 소요)...");
-            const filesetResolver = await vision.FilesetResolver.forVisionTasks(
+            log("3. AI 엔진 설정 중...");
+            const filesetResolver = await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
             );
-            textRecognizer = await vision.TextRecognizer.createFromOptions(filesetResolver, {
+            textRecognizer = await TextRecognizer.createFromOptions(filesetResolver, {
                 baseOptions: {
                     modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
                     delegate: "GPU"
                 }
             });
-            log("✅ AI 준비 완료!", "#4285f4");
+            log("✅ AI 엔진 최적화 완료!", "#4285f4");
 
-            log("4. 카메라 활성화 중...");
+            log("4. 카메라 시스템 가동...");
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
             });
             video.srcObject = stream;
             videoTrack = stream.getVideoTracks()[0];
             
-            // 하드웨어 지원 확인
+            // 하드웨어 지원 여부 체크
             const caps = videoTrack.getCapabilities();
             if (caps.torch) torchBtn.disabled = false;
             if (caps.focusMode && caps.focusMode.includes('manual')) macroBtn.disabled = false;
             scanBtn.disabled = false;
 
-            log("🚀 모든 준비 완료! 동전을 비추세요.", "#fff");
+            log("✨ 모든 준비 완료! 동전을 스캔하세요.", "#fff");
 
         } catch (err) {
             log("❌ 치명적 오류: " + err.message, "#ff4757");
@@ -124,7 +121,6 @@
         const canvas = document.getElementById('temp-canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 300; canvas.height = 300;
-        
         ctx.drawImage(video, (video.videoWidth-300)/2, (video.videoHeight-300)/2, 300, 300, 0, 0, 300, 300);
 
         const result = await textRecognizer.recognize(canvas);
@@ -155,10 +151,7 @@
         isMacroOn = !isMacroOn;
         const caps = videoTrack.getCapabilities();
         await videoTrack.applyConstraints({
-            advanced: [{ 
-                focusMode: isMacroOn ? "manual" : "continuous",
-                focusDistance: isMacroOn ? (caps.focusDistance?.min || 0) : undefined 
-            }]
+            advanced: [{ focusMode: isMacroOn ? "manual" : "continuous", focusDistance: isMacroOn ? (caps.focusDistance?.min || 0) : undefined }]
         });
         log(`🔍 접사 ${isMacroOn ? 'ON' : 'OFF'}`);
     };
@@ -177,11 +170,11 @@
         };
     }
 
-    // OpenCV 로드 확인 후 앱 시작
+    // 초기화 시작
     if (typeof cv !== 'undefined' && cv.onRuntimeInitialized) {
-        cv.onRuntimeInitialized = startApp;
+        cv.onRuntimeInitialized = init;
     } else {
-        setTimeout(startApp, 1000); // 1초 대기 후 시작
+        setTimeout(init, 1000);
     }
 </script>
 </body>
