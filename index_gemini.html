@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Coin Collector v12.0</title>
+    <title>AI Coin Collector v13.0</title>
     <script src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         :root { --primary: #4285f4; --terminal: #1e1e1e; }
         body { font-family: sans-serif; background: #f8f9fa; margin: 0; display: flex; flex-direction: column; align-items: center; }
         .viewport { position: relative; width: 90%; max-width: 380px; aspect-ratio: 1/1; margin: 15px 0; border-radius: 20px; overflow: hidden; background: #000; border: 3px solid #ddd; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 160px; overflow-y: auto; margin-bottom: 20px; }
-        button { padding: 12px 20px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; background: var(--primary); color: white; }
+        .guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; border: 2px dashed #00ff00; border-radius: 50%; pointer-events: none; }
+        .debug-section { width: 90%; max-width: 400px; background: var(--terminal); color: #00ff00; border-radius: 10px; padding: 10px; font-family: monospace; font-size: 11px; height: 150px; overflow-y: auto; margin-bottom: 20px; }
+        button { padding: 12px 20px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; background: var(--primary); color: white; margin-bottom: 20px; }
         button:disabled { background: #555; }
     </style>
 </head>
@@ -19,17 +20,18 @@
 
 <div class="viewport">
     <video id="webcam" autoplay playsinline></video>
+    <div class="guide"></div>
 </div>
 
-<div id="log" class="debug-section">> [v12.0] 정식 라이브러리 로드 중...</div>
+<div id="log" class="debug-section">> [v13.0] 시스템 재설정 중...</div>
 
 <button id="scan-btn" disabled>📷 동전 스캔 시작</button>
 
 <canvas id="temp-canvas" style="display:none;"></canvas>
 
 <script type="module">
-    // [해결] unpkg를 통해 모든 도구가 포함된 전체 패키지를 가져옵니다.
-    import vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
+    // [핵심 수정] 'default' 대신 정확한 이름(Named Import)을 사용합니다.
+    import { TextRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
 
     const video = document.getElementById('webcam');
     const logPanel = document.getElementById('log');
@@ -43,50 +45,67 @@
 
     async function init() {
         try {
-            log("1. 라이브러리 구성 확인 중...");
-            // 목록에 TextRecognizer가 있는지 다시 검사합니다.
-            const components = Object.keys(vision);
-            log("현재 도구 목록: " + components.join(", "));
-
-            if (!vision.TextRecognizer) {
-                log("⚠️ 아직 TextRecognizer가 없습니다. 대체 주소로 시도합니다.", "#ffc107");
-                // 주소를 바꿔서 재시도하거나 대체 로직 실행
-            }
-
-            log("2. AI 엔진(WASM) 로드 중...");
-            const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+            log("1. 라이브러리 로드 성공!");
+            
+            log("2. AI 엔진(WASM) 설정 중...");
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
             );
             
-            log("3. 텍스트 인식기 가동...");
-            textRecognizer = await vision.TextRecognizer.createFromOptions(filesetResolver, {
+            log("3. 텍스트 인식기(OCR) 생성 중...");
+            textRecognizer = await TextRecognizer.createFromOptions(vision, {
                 baseOptions: {
                     modelAssetPath: "https://storage.googleapis.com/mediapipe-models/text_recognizer/text_recognizer_thin/float32/1/text_recognizer_thin.tflite",
                     delegate: "GPU"
                 }
             });
+            log("✅ 텍스트 인식기 준비 완료!", "#2ed573");
 
-            log("4. 카메라 연결 중...");
+            log("4. 카메라 가동...");
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
             
             scanBtn.disabled = false;
-            log("✨ 준비 완료! 이번에는 성공할 것입니다.", "#fff");
+            log("✨ 모든 준비 끝! 스캔 버튼을 누르세요.", "#fff");
 
         } catch (err) {
-            log("❌ 치명적 오류: " + err.message, "#ff4757");
+            log("❌ 오류 발생: " + err.message, "#ff4757");
+            // 만약 TextRecognizer가 없다는 에러가 나면 여기서 잡힙니다.
         }
     }
 
     scanBtn.onclick = async () => {
-        log("🔍 이미지 분석 중...");
+        log("🔍 분석 중...");
         const canvas = document.getElementById('temp-canvas');
         canvas.width = 300; canvas.height = 300;
         canvas.getContext('2d').drawImage(video, (video.videoWidth-300)/2, (video.videoHeight-300)/2, 300, 300, 0, 0, 300, 300);
 
+        // [OpenCV 전처리] 속이 빈 글자 채우기
+        if (typeof cv !== 'undefined') {
+            try {
+                let src = cv.imread(canvas);
+                cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY);
+                cv.convertScaleAbs(src, src, 1.3, 0); // 대비 증가
+                cv.threshold(src, src, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+                
+                // 모폴로지 닫기 연산 (끊어진 글자 연결)
+                let M = cv.Mat.ones(3, 3, cv.CV_8U);
+                cv.morphologyEx(src, src, cv.MORPH_CLOSE, M);
+                
+                // 다시 반전 (흰 배경 검은 글자)
+                cv.bitwise_not(src, src);
+                cv.imshow(canvas, src);
+                src.delete(); M.delete();
+            } catch(e) { console.log("OpenCV 오류 무시"); }
+        }
+
         const result = await textRecognizer.recognize(canvas);
         const text = result.paragraphs.map(p => p.text).join(" ");
         log(`📡 인식 원문: "${text || '읽기 실패'}"`, "#ffc107");
+        
+        // 간단한 결과 파싱
+        const year = text.match(/19\d{2}|20\d{2}/)?.[0];
+        if (year) log(`📅 연도 발견: ${year}년`, "#fff");
     };
 
     setTimeout(init, 1000);
